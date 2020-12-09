@@ -1,4 +1,4 @@
-# **MURAL** Missingness in Unsupervised Random forests using Automatic (unsupervised) Learning 
+# **MURAL** Missingness in Unsupervised Random forests using Affinity-based Learning 
 
 ## Constructing Unsupervised Random Forests with Missing Values in Clinical Data with Meaningful Missingness
 
