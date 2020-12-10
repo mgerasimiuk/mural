@@ -221,6 +221,9 @@ class UnsupervisedTree():
             start_j = self.min_leaf_size
            
         for j in range(start_j, X_sorted.shape[0] - 1 - self.min_leaf_size):
+            if X_sorted[j] == X_sorted[j+1]:
+                continue
+            
             x_j = X_sorted[j]
 
             bins_low = np.histogram_bin_edges(X_sorted[:j], bins="auto")
