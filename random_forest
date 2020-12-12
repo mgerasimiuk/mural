@@ -1,11 +1,10 @@
 import time
 import numpy as np
-import numpy
-from scipy import stats
 from numpy.core.defchararray import replace
 from numpy.core.fromnumeric import size
-from itertools import combinations
-# stats is imported so that we can use stats.mode() to pick a leaf by plurality vote
+from collections import deque
+
+# Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 
 class UnsupervisedForest():
     """
@@ -22,8 +21,10 @@ class UnsupervisedForest():
         @param depth the maximum height of the trees
         @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
         """
+        # Measure time to evaluate model efficiency
         tic = time.perf_counter()
         if batch_size==None:
+            # Use all the observations each time
             self.batch_size = X.shape[0]
         else:
             self.batch_size = batch_size
@@ -44,6 +45,7 @@ class UnsupervisedForest():
         self.min_leaf_size = min_leaf_size
 
         self.rng = np.random.default_rng()
+        # This step creates the forest
         self.trees = [self.create_tree() for i in range(n_estimators)]
         
         toc = time.perf_counter()
@@ -99,7 +101,12 @@ class UnsupervisedTree():
         if root is None:
             self.root = self
             max_leaf = int((3 ** (depth + 1) - 1) / 2)
+            
+            # Create the adjacency matrix
+            # For more efficient code, it should be better to dynamically grow an adjacency list
+            # and only turn it into a matrix in the final step
             self.A = np.zeros((max_leaf, max_leaf))
+            
             UnsupervisedTree.index_counter = 1
             self.index = 0
             self.max_index = 0
@@ -117,14 +124,19 @@ class UnsupervisedTree():
         #self.index = index
 
         if parent is not None:
+            # Maintain a link between the node an its parent in case of need for traversal
             self.parent = parent
+            
+            # Update the adjacency matrix
             self.root.A[self.index, self.parent.index] = 1
             self.root.A[self.parent.index, self.index] = 1
 
         self.total_features = X.shape[1]
+        # Score is to be minimized by splits
         self.score = np.Inf
 
         self.rng = np.random.default_rng()
+        # This step fits the tree
         self.find_split()
     
     def find_split(self):
@@ -137,15 +149,6 @@ class UnsupervisedTree():
         if self.is_leaf():
             # Do not actually split the data
             return
-
-        # If we do split, update the adjacency matrix
-#        self.root.A[self.index, 3 * self.index + 1] = 1
-#        self.root.A[3 * self.index + 1, self.index] = 1
-#        self.root.A[self.index, 3 * self.index + 2] = 1
-#        self.root.A[3 * self.index + 2, self.index] = 1
-#        self.root.A[self.index, 3 * self.index + 3] = 1
-#        self.root.A[3 * self.index + 3, self.index] = 1
-
               
         split_column = self.split_column()
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
@@ -157,42 +160,29 @@ class UnsupervisedTree():
         where_low = np.nonzero(complete_cases <= self.threshold)[0] # Indices in the subset
         where_high = np.nonzero(complete_cases > self.threshold)[0]
 
+        # Randomly choose the features for each branch
         m_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
         l_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
         h_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
 
+        # Create three subtrees for the data to go to
+        # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
         self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[where_missing], m_branch_features, 
                                         self.depth - 1, self.min_leaf_size, 3 * self.index + 1, root=self.root, parent=self)
         self.low = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_low], l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, 3 * self.index + 2, root=self.root, parent=self)
         self.high = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_high], h_branch_features, 
                                         self.depth - 1, self.min_leaf_size, 3 * self.index + 3, root=self.root, parent=self)
-    
-    def find_initial_split(self):
-        """
-        Split the inputs into all combinations of missingness.
-        """
-        X_chosen = self.X[self.chosen_inputs, self.chosen_features]
-        where_missing = np.nonzero(np.isnan(X_chosen))[1]
-        missing_indices = list(np.unique(where_missing))
-
-        combo_list = []
-        for i in range(0, len(self.chosen_features) + 1):
-            for combo in combinations(missing_indices, i):
-                combo_list.append(combo)
-
-        for combo in combo_list:
-            pass
-
-
 
     def find_better_split(self, index):
         """
         Find the best split for the chosen variable. Tries all the values seen in the data to find one
         that leads to the biggest information gain when split on.
         """
+        # Make a sorted list of values in this variable and get rid of missingness
         X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
         X_sorted = X_sorted[~np.isnan(X_sorted)]
+        
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
         bin_number = len(total_bins)
@@ -222,14 +212,17 @@ class UnsupervisedTree():
            
         for j in range(start_j, X_sorted.shape[0] - 1 - self.min_leaf_size):
             if X_sorted[j] == X_sorted[j+1]:
+                # We do not want to calculate scores for impossible splits
+                # A split must put all instances of equal values on one side
                 continue
             
             x_j = X_sorted[j]
 
+            # Calculate the optimal numbers of bins for the histograms
             bins_low = np.histogram_bin_edges(X_sorted[:j], bins="auto")
             bins_high = np.histogram_bin_edges(X_sorted[j:], bins="auto")
 
-            # We might want to change this somehow
+            # Estimate the distributions on each side of the split
             dist_low = np.histogram(X_sorted[:j], bins=bins_low, density=True)[0]
             dist_high = np.histogram(X_sorted[j:], bins=bins_high, density=True)[0]
             
@@ -238,7 +231,7 @@ class UnsupervisedTree():
             H_high = -1 * np.sum(dist_high * np.log(dist_high))
 
             # We want to maximize information gain I = H(input_distribution) - score
-            # So we minimize score here
+            # So we minimize score here and remember best threshold so far
             score = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
             if score < self.score:
                 self.split_feature = index
@@ -263,12 +256,6 @@ class UnsupervisedTree():
         """
         return np.array([self.apply_row(x_i) for x_i in X])
 
-    def path(self, X):
-        """
-        Get decision path for a matrix of observations.
-        """
-        return np.array([self.path_row(x_i) for x_i in X])
-
     def apply_row(self, x_i):
         """
         Recursively apply tree to an observation. If the feature we split on is missing,
@@ -284,19 +271,15 @@ class UnsupervisedTree():
         else:
             t = self.high
         
+        # Traverse the tree
         return t.apply_row(x_i)
-
-    def path_row(self, x_i):
-        """
-        Recursively apply tree to an observation and get its decision path
-        """
-        return None
 
     def adjacency(self):
         """
         Return the adjacency matrix of the tree.
         """
         return self.root.A
+        
 
 def binary_affinity(leaf_list):
     """
@@ -311,6 +294,8 @@ def binary_affinity(leaf_list):
         n = idx.shape[0]
         I1 = np.tile(idx, [n,1])
         I2 = np.tile(idx[:,None], [1,n])
+        # Force broadcasting to get a binary affinity matrix
+        # (Do observations i and j have the same leaf assignment?)
         M = np.equal(I1, I2).astype("int")
         M_list.append(M)
 
@@ -383,6 +368,7 @@ def get_average_distance(D_list, leaf_list):
     M_list = []
 
     for D, idx in zip(D_list, leaf_list):
+        # Choose M(x_i, x_j) to be the distance from leaf(x_i) to leaf(x_j)
         M = D[idx][:,idx]
         M_list.append(M)
 
