@@ -332,11 +332,9 @@ def adjacency_to_distances(A):
     Takes adjacency matrix and returns a distance matrix on its decision tree.
     Unlike method above, manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
-    @param A an adjacency matrix of a tree or forest
-    @return a list of distance matrices, one for each tree in a forest
+    @param A an adjacency matrix of a tree
+    @return a distance matrix on the tree
     """
-
-    # Make a distance matrix for each root
     # The number of nodes in one decision tree
     n = A.shape[0]
 
@@ -398,12 +396,12 @@ def adjacency_matrix_from_list(Al):
 
 def adjacency_list_to_distances(Al):
     """
-    Takes adjacency matrix and returns a distance matrix on its decision tree.
+    Takes adjacency list and returns a distance matrix on its decision tree.
     Unlike method above, manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
 
     @param Al an adjacency list of a tree
-    @return a distance matrix of the tree
+    @return a distance matrix on the tree
     """
     # The number of nodes in one decision tree
     n = len(Al)
