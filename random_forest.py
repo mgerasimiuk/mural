@@ -5,6 +5,7 @@ from numpy.core.fromnumeric import size
 from collections import deque
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
+# Which is derived from the fast.ai course (using the Apache license)
 
 class UnsupervisedForest():
     """
@@ -72,6 +73,12 @@ class UnsupervisedForest():
         Get adjacency matrices from each tree in a fitted model.
         """
         return np.array([tree.adjacency()[:tree.root.max_index+1,:tree.root.max_index+1] for tree in self.trees])
+    
+    def adjacency_list(self):
+        """
+        Get adjacency lists from each tree in a fitted model.
+        """
+        return [tree.adjacency_list() for tree in self.trees]
 
 
 class UnsupervisedTree():
@@ -106,6 +113,7 @@ class UnsupervisedTree():
             # For more efficient code, it should be better to dynamically grow an adjacency list
             # and only turn it into a matrix in the final step
             self.A = np.zeros((max_leaf, max_leaf))
+            self.Al = [[]]
             
             UnsupervisedTree.index_counter = 1
             self.index = 0
@@ -113,6 +121,7 @@ class UnsupervisedTree():
         else:
             self.root = root
             self.A = root.A
+            self.Al = root.Al
             self.index = UnsupervisedTree.index_counter
             UnsupervisedTree.index_counter += 1
         
@@ -130,6 +139,8 @@ class UnsupervisedTree():
             # Update the adjacency matrix
             self.root.A[self.index, self.parent.index] = 1
             self.root.A[self.parent.index, self.index] = 1
+            self.root.Al[self.index].append(self.parent.index)
+            self.root.Al[self.parent.index].append(self.index)
 
         self.total_features = X.shape[1]
         # Score is to be minimized by splits
@@ -159,6 +170,11 @@ class UnsupervisedTree():
 
         where_low = np.nonzero(complete_cases <= self.threshold)[0] # Indices in the subset
         where_high = np.nonzero(complete_cases > self.threshold)[0]
+        
+        # Add new nodes to the adjacency list
+        self.root.Al.append([])
+        self.root.Al.append([])
+        self.root.Al.append([])
 
         # Randomly choose the features for each branch
         m_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
@@ -279,8 +295,14 @@ class UnsupervisedTree():
         Return the adjacency matrix of the tree.
         """
         return self.root.A
-        
+    
+    def adjacency_list(self):
+        """
+        Return the adjacency list of the tree.
+        """
+        return self.root.Al
 
+        
 def binary_affinity(leaf_list):
     """
     Calculates the average binary affinity from a list of leaves on each tree.
@@ -342,6 +364,74 @@ def adjacency_to_distances(A):
             for j in range(0, n):
                 # To see if they are adjacent to the current one and not seen before
                 if A[curr][j] == 1 and not visited[j]:
+                    # Then mark the node as visited
+                    visited[j] = 1
+
+                    # j's distance from node i is one more than that from i to j's predecessor (curr)
+                    dist_simple[i][j] = dist_simple[i][curr] + 1
+                    # Compute the exponential edge distance
+                    dist_exp[i][j] = 2 ** dist_simple[i][j] - 1
+
+                    # Add j to the queue so that we can visit its neighbors later
+                    q.append(j)
+
+    # The distance matrix for this tree is now done
+    return dist_exp
+
+
+def adjacency_matrix_from_list(Al):
+    """
+    Makes an adjacency matrix from an adjacency list representing the same graph
+
+    @param Al an adjacency list (Python type)
+    @return an adjacency matrix (ndarray)
+    """
+    n = len(Al)
+    Am = np.zeros((n, n), dtype=int)
+
+    for i in range(n):
+        for v in Al[i]:
+            Am[i, v] = 1
+
+    return Am
+
+
+def adjacency_list_to_distances(Al):
+    """
+    Takes adjacency matrix and returns a distance matrix on its decision tree.
+    Unlike method above, manually runs breadth-first search to avoid calling networkx methods
+    and getting a dictionary intermediate.
+
+    @param Al an adjacency list of a tree
+    @return a distance matrix of the tree
+    """
+    # The number of nodes in one decision tree
+    n = len(Al)
+
+    dist_simple = np.zeros((n, n))
+    dist_exp = np.full((n, n), np.Infinity)
+    np.fill_diagonal(dist_exp, 0)
+
+    # The steps below compute shortest paths by calling BFS from each node
+    for i in range(0, n):
+        # Initialize a queue and push the starting point onto it
+        q = deque()
+        q.append(i)
+
+        # Keep track of what nodes we visited in this search
+        visited = np.zeros(n)
+        # We should not come back to where we started
+        visited[i] = 1
+
+        # Keep searching until we run out of unseen nodes
+        while q:
+            # Look at the node we discovered earliest
+            curr = q.popleft()
+
+            # Check all neighbors
+            for j in Al[curr]:
+                # To see if they were not seen before
+                if not visited[j]:
                     # Then mark the node as visited
                     visited[j] = 1
 
