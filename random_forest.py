@@ -67,18 +67,12 @@ class UnsupervisedForest():
         Apply the fitted model to data.
         """
         return np.array([tree.apply(x) for tree in self.trees])
-
-    def adjacency(self):
-        """
-        Get adjacency matrices from each tree in a fitted model.
-        """
-        return np.array([tree.adjacency()[:tree.root.max_index+1,:tree.root.max_index+1] for tree in self.trees])
     
-    def adjacency_list(self):
+    def adjacency(self):
         """
         Get adjacency lists from each tree in a fitted model.
         """
-        return [tree.adjacency_list() for tree in self.trees]
+        return [tree.adjacency() for tree in self.trees]
 
 
 class UnsupervisedTree():
@@ -107,12 +101,8 @@ class UnsupervisedTree():
 
         if root is None:
             self.root = self
-            max_leaf = int((3 ** (depth + 1) - 1) / 2)
             
-            # Create the adjacency matrix
-            # For more efficient code, it should be better to dynamically grow an adjacency list
-            # and only turn it into a matrix in the final step
-            self.A = np.zeros((max_leaf, max_leaf))
+            # Create the adjacency list
             self.Al = [[]]
             
             UnsupervisedTree.index_counter = 1
@@ -120,7 +110,6 @@ class UnsupervisedTree():
             self.max_index = 0
         else:
             self.root = root
-            self.A = root.A
             self.Al = root.Al
             self.index = UnsupervisedTree.index_counter
             UnsupervisedTree.index_counter += 1
@@ -136,9 +125,7 @@ class UnsupervisedTree():
             # Maintain a link between the node an its parent in case of need for traversal
             self.parent = parent
             
-            # Update the adjacency matrix
-            self.root.A[self.index, self.parent.index] = 1
-            self.root.A[self.parent.index, self.index] = 1
+            # Update the adjacency list
             self.root.Al[self.index].append(self.parent.index)
             self.root.Al[self.parent.index].append(self.index)
 
@@ -289,14 +276,8 @@ class UnsupervisedTree():
         
         # Traverse the tree
         return t.apply_row(x_i)
-
-    def adjacency(self):
-        """
-        Return the adjacency matrix of the tree.
-        """
-        return self.root.A
     
-    def adjacency_list(self):
+    def adjacency(self):
         """
         Return the adjacency list of the tree.
         """
@@ -327,56 +308,6 @@ def binary_affinity(leaf_list):
     return M_avg
 
 
-def adjacency_to_distances(A):
-    """
-    Takes adjacency matrix and returns a distance matrix on its decision tree.
-    Unlike method above, manually runs breadth-first search to avoid calling networkx methods
-    and getting a dictionary intermediate.
-    @param A an adjacency matrix of a tree
-    @return a distance matrix on the tree
-    """
-    # The number of nodes in one decision tree
-    n = A.shape[0]
-
-    dist_simple = np.zeros((n, n))
-    dist_exp = np.full((n, n), np.Infinity)
-    np.fill_diagonal(dist_exp, 0)
-
-    # The steps below compute shortest paths by calling BFS from each node
-    for i in range(0, A.shape[0]):
-        # Initialize a queue and push the starting point onto it
-        q = deque()
-        q.append(i)
-
-        # Keep track of what nodes we visited in this search
-        visited = np.zeros(n)
-        # We should not come back to where we started
-        visited[i] = 1
-
-        # Keep searching until we run out of unseen nodes
-        while q:
-            # Look at the node we discovered earliest
-            curr = q.popleft()
-
-            # Check all nodes on this tree
-            for j in range(0, n):
-                # To see if they are adjacent to the current one and not seen before
-                if A[curr][j] == 1 and not visited[j]:
-                    # Then mark the node as visited
-                    visited[j] = 1
-
-                    # j's distance from node i is one more than that from i to j's predecessor (curr)
-                    dist_simple[i][j] = dist_simple[i][curr] + 1
-                    # Compute the exponential edge distance
-                    dist_exp[i][j] = 2 ** dist_simple[i][j] - 1
-
-                    # Add j to the queue so that we can visit its neighbors later
-                    q.append(j)
-
-    # The distance matrix for this tree is now done
-    return dist_exp
-
-
 def adjacency_matrix_from_list(Al):
     """
     Makes an adjacency matrix from an adjacency list representing the same graph
@@ -394,7 +325,7 @@ def adjacency_matrix_from_list(Al):
     return Am
 
 
-def adjacency_list_to_distances(Al):
+def adjacency_to_distances(Al):
     """
     Takes adjacency list and returns a distance matrix on its decision tree.
     Unlike method above, manually runs breadth-first search to avoid calling networkx methods
