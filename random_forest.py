@@ -73,6 +73,22 @@ class UnsupervisedForest():
         Get adjacency lists from each tree in a fitted model.
         """
         return [tree.adjacency() for tree in self.trees]
+    
+    def to_pickle(self, path):
+        """
+        Saves the object to a pickle with the given path.
+        """
+        f = open(path, "wb")
+        pickle.dump(self, f)
+        f.close()
+
+    def to_json(self, path):
+        """
+        Saves the object to a json file with the given path.
+        """
+        f = open(path, "w")
+        json.dump(self, f)
+        f.close()
 
 
 class UnsupervisedTree():
