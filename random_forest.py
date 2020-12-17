@@ -1,8 +1,11 @@
+# MURAL code
 import time
 import numpy as np
 from numpy.core.defchararray import replace
 from numpy.core.fromnumeric import size
 from collections import deque
+import pickle
+import json
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
@@ -318,8 +321,8 @@ def binary_affinity(leaf_list):
         M = np.equal(I1, I2).astype("int")
         M_list.append(M)
 
-    M_list = np.asarray(M_list)
-    M_avg = np.mean(M_list, axis=0)
+    M_sum = sum(M_list)
+    M_avg = M_sum / len(M_list)
 
     return M_avg
 
@@ -327,7 +330,6 @@ def binary_affinity(leaf_list):
 def adjacency_matrix_from_list(Al):
     """
     Makes an adjacency matrix from an adjacency list representing the same graph
-
     @param Al an adjacency list (Python type)
     @return an adjacency matrix (ndarray)
     """
@@ -346,7 +348,6 @@ def adjacency_to_distances(Al):
     Takes adjacency list and returns a distance matrix on its decision tree.
     Unlike method above, manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
-
     @param Al an adjacency list of a tree
     @return a distance matrix on the tree
     """
@@ -407,7 +408,27 @@ def get_average_distance(D_list, leaf_list):
         M = D[idx][:,idx]
         M_list.append(M)
 
-    M_list = np.asarray(M_list)
-    M_avg = np.mean(M_list, axis=0)
+    M_sum = sum(M_list)
+    M_avg = M_sum / len(M_list)
 
     return M_avg
+
+
+def load_pickle(path):
+    """
+    Loads an UnsupervisedForest object from pickle.
+    """
+    f = open(path, "rb")
+    result = pickle.load(f)
+    f.close()
+    return result
+
+
+def load_json(path):
+    """
+    Loads an UnsupervisedForest object from json file.
+    """
+    f = open(path, "r")
+    result = json.load(f)
+    f.close()
+    return result
