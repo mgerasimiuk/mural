@@ -159,18 +159,14 @@ class UnsupervisedTree():
     def find_split(self):
         """
         Find the best split for the tree by checking all splits over all variables.
-        """        
-        if self.is_leaf():
-            # Do not actually split the data
-            return
-        
+        """          
         for index in self.chosen_features:
             self.find_better_split(index)
             
-        if self.score == np.Inf:
-            # Do not split if no split available
+        if self.is_leaf():
+            # Do not actually split the data
             return
-              
+                  
         split_column = self.split_column()
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
 
@@ -268,7 +264,7 @@ class UnsupervisedTree():
         """
         Checks if we reached a leaf.
         """
-        return self.depth <= 0
+        return self.depth <= 0 or self.score == np.Inf
 
     def split_column(self):
         """
