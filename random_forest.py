@@ -346,7 +346,7 @@ def adjacency_matrix_from_list(Al):
 def adjacency_to_distances(Al):
     """
     Takes adjacency list and returns a distance matrix on its decision tree.
-    Unlike method above, manually runs breadth-first search to avoid calling networkx methods
+    Manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
     @param Al an adjacency list of a tree
     @return a distance matrix on the tree
