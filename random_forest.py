@@ -107,7 +107,7 @@ class UnsupervisedTree():
         @param chosen_features ndarray containing the indices of features to choose from at each node
         @param depth maximum height of this tree
         @param min_leaf_size minimum number of observations (without missingness) needed to create a new leaf
-        @param index the index of the root of this tree, where, if node j has children, they are 3j+1, 3j+2, 3j+3
+        @param index the index of the root of this tree
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
         """
