@@ -364,8 +364,8 @@ def adjacency_matrix_from_list(Al):
     Am = np.zeros((n, n), dtype=int)
 
     for i in range(n):
-        for v in Al[i]:
-            Am[i, v] = 1
+        for v, w in Al[i]:
+            Am[i, v] = w
 
     return Am
 
