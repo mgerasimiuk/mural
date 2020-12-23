@@ -76,7 +76,13 @@ class UnsupervisedForest():
         Get adjacency lists from each tree in a fitted model.
         """
         return [tree.adjacency() for tree in self.trees]
-    
+
+    def leaves(self):
+        """
+        Get lists of leaves for each tree in a fitted model.
+        """
+        return [tree.leaves() for tree in self.trees]
+
     def to_pickle(self, path):
         """
         Saves the object to a pickle with the given path.
@@ -123,6 +129,8 @@ class UnsupervisedTree():
             
             # Create the adjacency list
             self.Al = [[]]
+            # Create the leaf list to speed up getting distances
+            self.Ll = []
             
             UnsupervisedTree.index_counter = 1
             self.index = 0
@@ -130,6 +138,7 @@ class UnsupervisedTree():
         else:
             self.root = root
             self.Al = root.Al
+            self.Ll = root.Ll
             self.index = UnsupervisedTree.index_counter
             UnsupervisedTree.index_counter += 1
         
@@ -145,10 +154,9 @@ class UnsupervisedTree():
             self.parent = parent
             
             # Update the adjacency list
-            self.root.Al[self.index].append(self.parent.index)
-            self.root.Al[self.parent.index].append(self.index)
+            self.root.Al[self.index].append((self.parent.index, 2 ** self.depth))
+            self.root.Al[self.parent.index].append((self.index, 2 ** self.depth))
 
-        self.total_features = X.shape[1]
         # Score is to be maximized by splits
         self.score = np.NINF
 
@@ -160,11 +168,18 @@ class UnsupervisedTree():
         """
         Find the best split for the tree by checking all splits over all variables.
         """
-        for index in self.chosen_features:
-            self.find_better_split(index)
+        if self.depth <= 0:
+            # Do not split the data if depth exhausted
+            self.root.Ll.append(self.index)
+            return
+
+        for var_index in self.chosen_features:
+            # Look for the best decision (if any are possible)
+            self.find_better_split(var_index)
         
-        if self.is_leaf():
-            # Do not actually split the data
+        if self.score == np.NINF:
+            # Do not split the data if decisions exhausted
+            self.root.Ll.append(self.index)
             return
               
         split_column = self.split_column()
@@ -259,7 +274,7 @@ class UnsupervisedTree():
             H_low = -1 * np.sum(dist_low * np.log(dist_low))
             H_high = -1 * np.sum(dist_high * np.log(dist_high))
 
-            # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot|H(low) - |n_high|/|n_tot|H(high)
+            # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
             score = H_full - (j / X_sorted.shape[0]) * H_low - (1 - j / X_sorted.shape[0]) * H_high
             if score > self.score:
                 self.split_feature = index
@@ -308,6 +323,12 @@ class UnsupervisedTree():
         """
         return self.root.Al
 
+    def leaves(self):
+        """
+        Return the list of leaves of this tree.
+        """
+        return self.root.Ll
+
         
 def binary_affinity(leaf_list):
     """
@@ -349,23 +370,26 @@ def adjacency_matrix_from_list(Al):
     return Am
 
 
-def adjacency_to_distances(Al):
+def adjacency_to_distances(Al, Ll=None):
     """
     Takes adjacency list and returns a distance matrix on its decision tree.
     Manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
     @param Al an adjacency list of a tree
+    @param Ll a list of leaves of a tree (optional)
     @return a distance matrix on the tree
     """
     # The number of nodes in one decision tree
     n = len(Al)
 
-    dist_simple = np.zeros((n, n))
-    dist_exp = np.full((n, n), np.Infinity)
-    np.fill_diagonal(dist_exp, 0)
+    if Ll is None:
+        Ll = range(0, n)
+
+    dist = np.full((n, n), np.Infinity)
+    np.fill_diagonal(dist, 0)
 
     # The steps below compute shortest paths by calling BFS from each node
-    for i in range(0, n):
+    for i in Ll:
         # Initialize a queue and push the starting point onto it
         q = deque()
         q.append(i)
@@ -381,29 +405,27 @@ def adjacency_to_distances(Al):
             curr = q.popleft()
 
             # Check all neighbors
-            for j in Al[curr]:
+            for j, w in Al[curr]:
                 # To see if they were not seen before
                 if not visited[j]:
                     # Then mark the node as visited
                     visited[j] = 1
 
-                    # j's distance from node i is one more than that from i to j's predecessor (curr)
-                    dist_simple[i][j] = dist_simple[i][curr] + 1
-                    # Compute the exponential edge distance
-                    dist_exp[i][j] = 2 ** dist_simple[i][j] - 1
+                    # j's distance from node i is w more than that from i to j's predecessor (curr)
+                    dist[i][j] = dist[i][curr] + w
 
                     # Add j to the queue so that we can visit its neighbors later
                     q.append(j)
 
     # The distance matrix for this tree is now done
-    return dist_exp
+    return dist
 
 
 def get_average_distance(D_list, leaf_list):
     """
     Compute the average distance between two observations across all decision trees in a forest.
     @param D_list a list containing the distance matrices for each tree in the given forest
-    @param list already found list of leaves for each tree
+    @param leaf_list already found list of leaves for each tree
     @return the matrix of average distances for the observations in this batch
     """
 
