@@ -107,7 +107,7 @@ class UnsupervisedTree():
         @param chosen_features ndarray containing the indices of features to choose from at each node
         @param depth maximum height of this tree
         @param min_leaf_size minimum number of observations (without missingness) needed to create a new leaf
-        @param index the index of the root of this tree
+        @param index the index of the root of this tree (ignored, left from old numbering system)
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
         """
@@ -149,8 +149,8 @@ class UnsupervisedTree():
             self.root.Al[self.parent.index].append(self.index)
 
         self.total_features = X.shape[1]
-        # Score is to be minimized by splits
-        self.score = np.Inf
+        # Score is to be maximized by splits
+        self.score = np.NINF
 
         self.rng = np.random.default_rng()
         # This step fits the tree
@@ -159,14 +159,14 @@ class UnsupervisedTree():
     def find_split(self):
         """
         Find the best split for the tree by checking all splits over all variables.
-        """          
+        """
         for index in self.chosen_features:
             self.find_better_split(index)
-            
+        
         if self.is_leaf():
             # Do not actually split the data
             return
-                  
+              
         split_column = self.split_column()
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
 
@@ -207,6 +207,13 @@ class UnsupervisedTree():
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
+
+        dist_full = np.histogram(X_sorted, bins=total_bins, density=True)[0]   
+        H_full = -1 * np.sum(dist_full * np.log(dist_full))
+        if H_full <= self.score:
+            # Then we will not get a higher information gain with this variable
+            return
+
         bin_number = len(total_bins)
         #print(total_bins, bin_number)
         if bin_number>2:
@@ -231,7 +238,7 @@ class UnsupervisedTree():
             start_j = np.where(X_sorted>=value_position)[0][0]
         else:
             start_j = self.min_leaf_size
-           
+
         for j in range(start_j, X_sorted.shape[0] - 1 - self.min_leaf_size):
             if X_sorted[j] == X_sorted[j+1]:
                 # We do not want to calculate scores for impossible splits
@@ -252,10 +259,9 @@ class UnsupervisedTree():
             H_low = -1 * np.sum(dist_low * np.log(dist_low))
             H_high = -1 * np.sum(dist_high * np.log(dist_high))
 
-            # We want to maximize information gain I = H(input_distribution) - score
-            # So we minimize score here and remember best threshold so far
-            score = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
-            if score < self.score:
+            # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot|H(low) - |n_high|/|n_tot|H(high)
+            score = H_full - (j / X_sorted.shape[0]) * H_low - (1 - j / X_sorted.shape[0]) * H_high
+            if score > self.score:
                 self.split_feature = index
                 self.score = score
                 self.threshold = x_j
@@ -264,7 +270,7 @@ class UnsupervisedTree():
         """
         Checks if we reached a leaf.
         """
-        return self.depth <= 0 or self.score == np.Inf
+        return self.score == np.NINF or self.depth <= 0
 
     def split_column(self):
         """
