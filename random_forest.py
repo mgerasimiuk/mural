@@ -25,6 +25,7 @@ class UnsupervisedForest():
         @param depth the maximum height of the trees
         @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
         """
+
         # Measure time to evaluate model efficiency
         tic = time.perf_counter()
         if batch_size==None:
@@ -59,6 +60,7 @@ class UnsupervisedForest():
         """
         Create and fit a decision tree to be used by the forest.
         """
+
         chosen_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
         chosen_inputs = np.sort(self.rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
@@ -83,10 +85,23 @@ class UnsupervisedForest():
         """
         return [tree.leaves() for tree in self.trees]
 
+    def wasserstein(self, p, q):
+        """
+        Computes the tree-sliced Wasserstein metric for the given cohorts.
+
+        @param p a cohort
+        @param q another cohort
+        @return an estimate of the Wasserstein distance between them
+        """
+
+        S = sum([tree.wasserstein(p, q) for tree in self.trees])
+        return S / len(self.trees)
+
     def to_pickle(self, path):
         """
         Saves the object to a pickle with the given path.
         """
+
         f = open(path, "wb")
         pickle.dump(self, f)
         f.close()
@@ -95,6 +110,7 @@ class UnsupervisedForest():
         """
         Saves the object to a json file with the given path.
         """
+
         f = open(path, "w")
         json.dump(self, f)
         f.close()
@@ -117,6 +133,7 @@ class UnsupervisedTree():
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
         """
+
         self.X = X
         self.n_sampled_features = n_sampled_features
         if chosen_inputs is None:
@@ -168,6 +185,7 @@ class UnsupervisedTree():
         """
         Find the best split for the tree by checking all splits over all variables.
         """
+
         if self.depth <= 0:
             # Do not split the data if depth exhausted
             self.root.Ll.append(self.index)
@@ -216,6 +234,7 @@ class UnsupervisedTree():
         Find the best split for the chosen variable. Tries all the values seen in the data to find one
         that leads to the biggest information gain when split on.
         """
+
         # Make a sorted list of values in this variable and get rid of missingness
         X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
         X_sorted = X_sorted[~np.isnan(X_sorted)]
@@ -304,6 +323,7 @@ class UnsupervisedTree():
         Recursively apply tree to an observation. If the feature we split on is missing,
         go to the designated child node, else split by comparing with threshold value.
         """
+
         if self.is_leaf():
             # Recursion base case. Say which leaf the observation ends in.
             return self.index
@@ -329,6 +349,92 @@ class UnsupervisedTree():
         """
         return self.root.Ll
 
+    def wasserstein(self, p, q):
+        """
+        Computes the tree-Wasserstein metric for the given cohorts.
+
+        @param p a cohort
+        @param q another cohort
+        @return the tree-Wasserstein distance between them
+        """
+
+        n_p = p.shape[0]
+        n_q = q.shape[0]
+
+        V = len(self.Al)
+        p_results = np.zeros(V)
+        q_results = np.zeros(V)
+
+        for p_i in p:
+            self.apply_wasserstein(p_i, p_results)
+
+        for q_i in q:
+            self.apply_wasserstein(q_i, q_results)
+
+        W = self.wasserstein_bfs(p_results, n_p, q_results, n_q)
+        return W
+
+    def apply_wasserstein(self, x_i, x_results):
+        """
+        Classifies the observation and assigns it to each subtree it enters,
+        recursively traversing the whole tree.
+        """
+
+        x_results[self.index] += 1
+
+        if self.is_leaf():
+            # Recursion base case.
+            return
+        elif x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature]):
+            t = self.missing
+        elif x_i[self.split_feature] <= self.threshold:
+            t = self.low
+        else:
+            t = self.high
+        
+        # Traverse the tree
+        t.apply_wasserstein(x_i, x_results)
+        return
+
+    def wasserstein_bfs(self, p_results, n_p, q_results, n_q):
+        """
+        Visits each edge of the tree starting from its root to compute
+        the tree-Wasserstein metric.
+        """
+
+        Al = self.Al
+        n = len(Al)
+        acc = 0
+
+        # Initialize a queue and push the root onto it
+        queue = deque()
+        queue.append(0)
+
+        # Keep track of what nodes we visited in this search
+        visited = np.zeros(n)
+        # We should not come back to where we started
+        visited[0] = 1
+
+        # Keep searching until we run out of unseen nodes
+        while queue:
+            # Look at the node we discovered earliest
+            curr = queue.popleft()
+
+            # Check all neighbors
+            for j, w in Al[curr]:
+                # To see if they were not seen before
+                if not visited[j]:
+                    # Then mark the node as visited
+                    visited[j] = 1
+
+                    # See how many points from p and q are in the subtree rooted at the child node
+                    acc += w * np.abs((p_results[j] / n_p) - (q_results[j] / n_q))
+
+                    # Add j to the queue so that we can visit its neighbors later
+                    queue.append(j)
+        
+        return acc
+
         
 def binary_affinity(leaf_list):
     """
@@ -337,6 +443,7 @@ def binary_affinity(leaf_list):
     @param leaf_list a list of "classification" results for a given sample on each tree
     @return the elementwise average of binary affinities across all the trees
     """
+
     M_list = []
 
     for idx in leaf_list:
@@ -360,6 +467,7 @@ def adjacency_matrix_from_list(Al):
     @param Al an adjacency list (Python type)
     @return an adjacency matrix (ndarray)
     """
+
     n = len(Al)
     Am = np.zeros((n, n), dtype=int)
 
@@ -379,6 +487,7 @@ def adjacency_to_distances(Al, Ll=None):
     @param Ll a list of leaves of a tree (optional)
     @return a distance matrix on the tree
     """
+
     # The number of nodes in one decision tree
     n = len(Al)
 
@@ -446,6 +555,7 @@ def load_pickle(path):
     """
     Loads an UnsupervisedForest object from pickle.
     """
+
     f = open(path, "rb")
     result = pickle.load(f)
     f.close()
@@ -456,6 +566,7 @@ def load_json(path):
     """
     Loads an UnsupervisedForest object from json file.
     """
+
     f = open(path, "r")
     result = json.load(f)
     f.close()
