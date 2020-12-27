@@ -1,11 +1,11 @@
 # MURAL code
 import time
 import numpy as np
-from numpy.core.defchararray import replace
-from numpy.core.fromnumeric import size
 from collections import deque
 import pickle
 import json
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
@@ -84,6 +84,22 @@ class UnsupervisedForest():
         Get lists of leaves for each tree in a fitted model.
         """
         return [tree.leaves() for tree in self.trees]
+
+    def draw(self, n=None):
+        """
+        A simple way to visualize n trees from the forest.
+        """
+
+        N = len(self.trees)
+        if n is None:
+            n = N
+        elif n > N:
+            print(f"The most you can print are {N} trees")
+            return
+        
+        for i in range(n):
+            plt.figure(i)
+            self.trees[i].draw()
 
     def wasserstein(self, p, q):
         """
@@ -348,6 +364,17 @@ class UnsupervisedTree():
         Return the list of leaves of this tree.
         """
         return self.root.Ll
+
+    def draw(self):
+        """
+        A simple way to visualize this tree.
+        """
+
+        M = adjacency_matrix_from_list(self.Al)
+        G = nx.from_numpy_matrix(M)
+
+        pos = nx.drawing.nx_pydot.graphviz_layout(G, "dot", root=0)
+        nx.draw_networkx(G, pos=pos, node_size=20, font_size=0)
 
     def wasserstein(self, p, q):
         """
