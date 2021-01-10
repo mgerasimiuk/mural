@@ -12,6 +12,9 @@ from sklearn.datasets import make_swiss_roll
 import demap
 import os
 
+default_trees = [10, 100, 500]
+default_depths = [4, 6, 10]
+
 def graph_vars(df, vars_list):
     """
     Make plots of data distributions.
@@ -53,6 +56,58 @@ def make_splatter():
     data_noisy = demap.splatter.paths(bcv=0.2, dropout=0.5, seed=42)
 
     return data_true, data_noisy
+
+
+def make_embeddings(data, labels, path=None):
+    """
+    Make PCA, tSNE, and PHATE embeddings of the dataset and save them.
+
+    @param data the data to apply it to
+    @param labels the labels used for coloring
+    @param path the path to save embeddings and plots in, CWD by default
+    """
+    
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(f"{path}"):
+        print("Error: Path does not exist")
+        return
+
+    if not os.path.isdir(f"{path}/non_mural"):
+        os.mkdir(f"{path}/non_mural")
+
+    dims = data.shape[1]
+
+    # PCA reduction 
+    data_pca = scprep.reduce.pca(data, dims)
+    scprep.plot.scatter2d(data_pca[:, 0:2], c = labels,
+                          legend_anchor=(1,1),
+                          label_prefix='PCA', ticks=None,
+                          title='PCA',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/pca.png")
+    np.save(f"{path}/non_mural/pca.npy", data_pca[:, 0:2])
+
+    # tSNE
+    data_tsne = TSNE(n_components=2).fit_transform(data)
+    scprep.plot.scatter2d(data_tsne, c = labels,
+                          legend_anchor=(1,1),
+                          label_prefix='tSNE', ticks=None,
+                          title='tSNE',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/tsne.png")
+    np.save(f"{path}/non_mural/tsne.npy", data_tsne)
+
+    # PHATE
+    phate_op = phate.PHATE()
+    phate_orig = phate_op.fit_transform(data)
+    scprep.plot.scatter2d(phate_orig, c = labels,
+                          legend_anchor=(1,1),
+                          label_prefix='PHATE', ticks=None,
+                          title='PHATE',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/phate.png")
+    np.save(f"{path}/non_mural/phate.npy", phate_orig)
 
 
 def test_forest(forest, data, labels, path=None):
@@ -107,3 +162,62 @@ def test_forest(forest, data, labels, path=None):
                           title='PHATE',
                           figsize=(7,5),
                           filename="f{path}/{num_trees}trees{depth}depth/exponential")
+
+    
+def demap_reference(data, path=None):
+    """
+    Run DEMaP on dataset and reference embeddings and save the results.
+
+    @param data the data matrix
+    @param path a path to directory containing a non_mural directory
+    with the embeddings
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(f"{path}/non_mural"):
+        print("Error: Path does not exist or non_mural folder missing")
+        return
+
+    data_pca = np.load(f"{path}/non_mural/pca.npy")
+    data_tsne = np.load(f"{path}/non_mural/tsne.npy")
+    data_phate = np.load(f"{path}/non_mural/phate.npy")
+
+    demap_pca = demap.DEMaP(data, data_pca)
+    demap_tsne = demap.DEMaP(data, data_tsne)
+    demap_phate = demap.DEMaP(data, data_phate)
+
+    f = open(f"{path}/demap_reference.txt", "w")
+    f.write(f"DEMaP for PCA is {demap_pca}\n")
+    f.write(f"DEMaP for tSNE is {demap_tsne}\n")
+    f.write(f"DEMaP for PHATE is {demap_phate}\n")
+    f.close()
+
+
+def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
+    """
+    Run DEMaP on MURAL embeddings and save the results.
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(f"{path}"):
+        print("Error: Path does not exist")
+        return
+
+    f = open(f"{path}/demap_mural.txt", "w")
+
+    for t in trees:
+        for d in depths:
+            exponential_mural = np.load(f"{path}/{t}trees{d}depth/exponential_mural.npy")
+            binary_mural = np.load(f"{path}/{t}trees{d}depth/binary_mural.npy")
+
+            demap_mural_e = demap.DEMaP(data, exponential_mural)
+            demap_mural_b = demap.DEMaP(data, binary_mural)
+
+            f.write(f"For {t} trees, {d} depth:\n")
+            f.write(f"DEMaP for MURAL (e) is {demap_mural_e}\n")
+            f.write(f"DEMaP for MURAL (b) is {demap_mural_b}\n")
+            f.write("\n")
+
+    f.close()
