@@ -29,7 +29,7 @@ class UnsupervisedForest():
 
         # Measure time to evaluate model efficiency
         tic = time.perf_counter()
-        if batch_size==None:
+        if batch_size is None:
             # Use all the observations each time
             self.batch_size = X.shape[0]
         else:

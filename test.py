@@ -15,6 +15,7 @@ import os
 default_trees = [10, 100, 500]
 default_depths = [4, 6, 10]
 
+
 def graph_vars(df, vars_list):
     """
     Make plots of data distributions.
@@ -175,9 +176,12 @@ def demap_reference(data, path=None):
 
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}/non_mural"):
-        print("Error: Path does not exist or non_mural folder missing")
+    elif not os.path.isdir(f"{path}"):
+        print("Error: Path does not exist")
         return
+
+    if not os.path.isdir(f"{path}/non_mural"):
+        os.mkdir(f"{path}/non_mural")
 
     data_pca = np.load(f"{path}/non_mural/pca.npy")
     data_tsne = np.load(f"{path}/non_mural/tsne.npy")
@@ -221,3 +225,29 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
             f.write("\n")
 
     f.close()
+
+
+def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2, 
+                  decay=0.5, t_list=default_trees, d_list=default_depths, path=None):
+    """
+    Train MURAL forests and save them and their embeddings.
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(f"{path}"):
+        print("Error: Path does not exist")
+        return
+
+    for t in t_list:
+        for d in d_list:
+            if not os.path.isdir(f"{path}/{t}trees{d}depth"):
+                os.mkdir(f"{path}/{t}trees{d}depth")
+
+            forest = base.UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay)
+            forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
+
+            test_forest(forest, data, labels, path)
+
+    demap_mural(data, path, t_list, d_list)
+
