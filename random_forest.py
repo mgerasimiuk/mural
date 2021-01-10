@@ -14,7 +14,7 @@ class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
-    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth, min_leaf_size):
+    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth, min_leaf_size, decay=None):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -24,6 +24,7 @@ class UnsupervisedForest():
         @param batch_size number of observations each tree fits on, if None, then all observations are used
         @param depth the maximum height of the trees
         @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
+        @param decay the factor by which the weight decays for missing value nodes
         """
 
         # Measure time to evaluate model efficiency
@@ -49,6 +50,11 @@ class UnsupervisedForest():
         self.depth = depth
         self.min_leaf_size = min_leaf_size
 
+        if decay is None:
+            self.decay = 0.5
+        else:
+            self.decay = decay
+
         self.rng = np.random.default_rng()
         # This step creates the forest
         self.trees = [self.create_tree() for i in range(n_estimators)]
@@ -65,7 +71,8 @@ class UnsupervisedForest():
         chosen_inputs = np.sort(self.rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
-                                chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size, index=0)
+                                chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
+                                weight=0, decay=self.decay, rng=self.rng)
     
     def apply(self, x):
         """
@@ -136,7 +143,8 @@ class UnsupervisedTree():
     """
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
-    def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, index, root=None, parent=None):
+    def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
+                 min_leaf_size, weight, decay, root=None, parent=None, rng=None):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -145,9 +153,11 @@ class UnsupervisedTree():
         @param chosen_features ndarray containing the indices of features to choose from at each node
         @param depth maximum height of this tree
         @param min_leaf_size minimum number of observations (without missingness) needed to create a new leaf
-        @param index the index of the root of this tree (ignored, left from old numbering system)
+        @param weight the weight of the edge in which this node is the child
+        @param decay the factor by which the weight for missing value nodes decays
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
+        @param rng a random number generator
         """
 
         self.X = X
@@ -164,36 +174,43 @@ class UnsupervisedTree():
             self.Al = [[]]
             # Create the leaf list to speed up getting distances
             self.Ll = []
+
+            # Link to the forest's RNG
+            self.rng = rng
             
+            self.weight = 2 ** depth
+
             UnsupervisedTree.index_counter = 1
             self.index = 0
-            self.max_index = 0
         else:
             self.root = root
             self.Al = root.Al
             self.Ll = root.Ll
+
+            # Link to the root's RNG
+            self.rng = self.root.rng
+
+            self.weight = weight
+
             self.index = UnsupervisedTree.index_counter
             UnsupervisedTree.index_counter += 1
-        
-        self.root.max_index = self.index
         
         self.chosen_features = chosen_features
         self.depth = depth
         self.min_leaf_size = min_leaf_size
-        #self.index = index
+        self.decay = decay
 
         if parent is not None:
             # Maintain a link between the node an its parent in case of need for traversal
             self.parent = parent
             
             # Update the adjacency list
-            self.root.Al[self.index].append((self.parent.index, 2 ** self.depth))
-            self.root.Al[self.parent.index].append((self.index, 2 ** self.depth))
+            self.root.Al[self.index].append((self.parent.index, weight))
+            self.root.Al[self.parent.index].append((self.index, weight))
 
         # Score is to be maximized by splits
         self.score = np.NINF
 
-        self.rng = np.random.default_rng()
         # This step fits the tree
         self.find_split()
     
@@ -239,11 +256,14 @@ class UnsupervisedTree():
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
         self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[where_missing], m_branch_features, 
-                                        self.depth - 1, self.min_leaf_size, 3 * self.index + 1, root=self.root, parent=self)
+                                        self.depth - 1, self.min_leaf_size, self.weight * self.decay,
+                                        self.decay, root=self.root, parent=self)
         self.low = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_low], l_branch_features, 
-                                    self.depth - 1, self.min_leaf_size, 3 * self.index + 2, root=self.root, parent=self)
+                                    self.depth - 1, self.min_leaf_size, self.weight / 2,
+                                    self.decay, root=self.root, parent=self)
         self.high = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_high], h_branch_features, 
-                                        self.depth - 1, self.min_leaf_size, 3 * self.index + 3, root=self.root, parent=self)
+                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
+                                     self.decay, root=self.root, parent=self)
 
     def find_better_split(self, index):
         """
@@ -266,24 +286,24 @@ class UnsupervisedTree():
 
         bin_number = len(total_bins)
         #print(total_bins, bin_number)
-        if bin_number>2:
+        if bin_number > 2:
         
             lower_bound = np.min(X_sorted)
             upper_bound = np.max(X_sorted)
-            width = (upper_bound - lower_bound)/bin_number
+            width = (upper_bound - lower_bound) / bin_number
     
             list_var = []
-            for low in range(bin_number-1):
-                list_var.append(lower_bound + (low+1)*width)
+            for low in range(bin_number - 1):
+                list_var.append(lower_bound + (low + 1) * width)
             array_labels = np.digitize(X_sorted, list_var)
             # Calculate probabilities for the bins
-            array_prob = np.bincount(array_labels)/np.sum(np.bincount(array_labels))
+            array_prob = np.bincount(array_labels) / np.sum(np.bincount(array_labels))
             # Cumulative sum of probabilities
             array_prob_cumsum = np.cumsum(array_prob)
             #print(array_prob_cumsum)
             # Start calculation at predetermined cutoff 0.25 cumulative probability 
             # Assumption that before this point there is no meaningful signal
-            array_position = np.where(array_prob_cumsum>=0.25)[0][0]
+            array_position = np.where(array_prob_cumsum >= 0.25)[0][0]
             value_position = total_bins[array_position]
             start_j = np.where(X_sorted>=value_position)[0][0]
         else:
