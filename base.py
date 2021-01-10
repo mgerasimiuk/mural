@@ -60,7 +60,8 @@ class UnsupervisedForest():
         self.trees = [self.create_tree() for i in range(n_estimators)]
         
         toc = time.perf_counter()
-        print(f"Completed the Unsupervised RF in {toc - tic:0.4f} seconds")
+        self.time_used = toc - tic
+        print(f"Completed the Unsupervised RF in {self.time_used:0.4f} seconds")
         
     def create_tree(self):
         """

@@ -70,7 +70,7 @@ def make_embeddings(data, labels, path=None):
     
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}"):
+    elif not os.path.isdir(path):
         print("Error: Path does not exist")
         return
 
@@ -123,7 +123,7 @@ def test_forest(forest, data, labels, path=None):
 
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}"):
+    elif not os.path.isdir(path):
         print("Error: Path does not exist")
         return
 
@@ -176,7 +176,7 @@ def demap_reference(data, path=None):
 
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}"):
+    elif not os.path.isdir(path):
         print("Error: Path does not exist")
         return
 
@@ -205,7 +205,7 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
 
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}"):
+    elif not os.path.isdir(path):
         print("Error: Path does not exist")
         return
 
@@ -235,9 +235,11 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
 
     if path is None:
         path = os.getcwd()
-    elif not os.path.isdir(f"{path}"):
+    elif not os.path.isdir(path):
         print("Error: Path does not exist")
         return
+
+    f = open(f"{path}/times.txt", "w")
 
     for t in t_list:
         for d in d_list:
@@ -246,8 +248,10 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
 
             forest = base.UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
+            f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
             test_forest(forest, data, labels, path)
 
     demap_mural(data, path, t_list, d_list)
 
+    f.close()
