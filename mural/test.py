@@ -1,5 +1,5 @@
 # Code for testing MURAL
-import base
+import mural
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -135,34 +135,34 @@ def test_forest(forest, data, labels, path=None):
 
     # Run binary affinities
     forest_fitted = forest.apply(data)
-    b_forest = base.binary_affinity(forest_fitted)
+    b_forest = mural.binary_affinity(forest_fitted)
 
     # Plot binary affinities with PHATE by passing in affinity matrix
     phate_b = phate.PHATE(knn_dist="precomputed_distance")
     phate_fit_b = phate_b.fit_transform(b_forest)
-    np.save("f{path}/{num_trees}trees{depth}depth/binary_mural", phate_fit_b)
+    np.save(f"{path}/{num_trees}trees{depth}depth/binary_mural", phate_fit_b)
 
     scprep.plot.scatter2d(phate_fit_b, c = labels, 
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
                           figsize=(7,5),
-                          filename="f{path}/{num_trees}trees{depth}depth/binary")
+                          filename=f"{path}/{num_trees}trees{depth}depth/binary")
 
     # For exponential affinities
-    D_list = [base.adjacency_to_distances(A) for A in forest.adjacency()]
-    avg_distance = base.get_average_distance(D_list, forest_fitted)
+    D_list = [mural.adjacency_to_distances(A) for A in forest.adjacency()]
+    avg_distance = mural.get_average_distance(D_list, forest_fitted)
 
     # Plot exponential affinities with PHATE by passing in distance matrix
     phate_e = phate.PHATE(knn_dist="precomputed_distance")
     phate_fit_e = phate_e.fit_transform(avg_distance)
-    np.save("f{path}/{num_trees}trees{depth}depth/exponential_mural", phate_fit_e)
+    np.save(f"{path}/{num_trees}trees{depth}depth/exponential_mural", phate_fit_e)
     scprep.plot.scatter2d(phate_fit_e, c = labels, 
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
                           figsize=(7,5),
-                          filename="f{path}/{num_trees}trees{depth}depth/exponential")
+                          filename=f"{path}/{num_trees}trees{depth}depth/exponential")
 
     
 def demap_reference(data, path=None):
@@ -246,7 +246,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             if not os.path.isdir(f"{path}/{t}trees{d}depth"):
                 os.mkdir(f"{path}/{t}trees{d}depth")
 
-            forest = base.UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay)
+            forest = mural.UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
