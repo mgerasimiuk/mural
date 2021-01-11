@@ -80,7 +80,7 @@ def make_missing_middle(data, n_missing, idxs=None):
         print("Error: Too many values selected")
         return
 
-    new_missing, new_imputed = data[:,:], data[:,:]
+    new_missing, new_imputed = np.copy(data), np.copy(data)
 
     for idx, num in zip(idxs, n_missing):
         col = new_missing[:, idx]
