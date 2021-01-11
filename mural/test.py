@@ -59,6 +59,45 @@ def make_splatter():
     return data_true, data_noisy
 
 
+def make_missing_middle(data, n_missing, idxs=None):
+    """
+    Take a dataset and create two datasets, one with missing (NaN)
+    values in the interquartile range, another with all NaNs replaced
+    with the mean.
+
+    @param data the data matrix
+    @param n_missing an array with numbers of observations with missing values in each column
+    @param idxs the column indices to do this process in
+    @return two data matrices
+    """
+
+    d = data.shape[1]
+    n = data.shape[0]
+
+    if idxs is None:
+        idxs = np.arange(d)
+    elif len(idxs) > np.arange(d):
+        print("Error: Too many values selected")
+        return
+
+    new_missing, new_imputed = data[:,:], data[:,:]
+
+    for idx, num in zip(idxs, n_missing):
+        col = new_missing[:, idx]
+        avg = np.mean(col)
+        q1 = np.quantile(col, 0.25)
+        q3 = np.quantile(col, 0.75)
+
+        mask = (col >= q1) & (col <= q3)
+        where_iqr = np.nonzero(mask)[0]
+        to_del = np.random.choice(where_iqr, size=num, replace=False)
+
+        new_missing[to_del, idx] = None
+        new_imputed[to_del, idx] = avg
+
+    return new_missing, new_imputed
+
+
 def make_embeddings(data, labels, path=None):
     """
     Make PCA, tSNE, and PHATE embeddings of the dataset and save them.
