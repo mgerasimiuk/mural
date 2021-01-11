@@ -1,4 +1,5 @@
 import setuptools
+from Cython.Build import cythonize
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -19,4 +20,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.6",
+    ext_modules = cythonize("mural/split.pyx"),
 )
