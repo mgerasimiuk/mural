@@ -240,6 +240,11 @@ def demap_reference(data, path=None):
 def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
     """
     Run DEMaP on MURAL embeddings and save the results.
+
+    @param gt the ground truth
+    @param path the path to a directory with the MURAL embedding directories
+    @param trees an array of numbers of trees
+    @param depths an array of depth parameters
     """
 
     if path is None:
@@ -266,10 +271,21 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
     f.close()
 
 
-def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2, 
+def train_forests(data, labels, gt, sampled_features, batch_size, min_leaf_size=2, 
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None):
     """
     Train MURAL forests and save them and their embeddings.
+
+    @param data the data matrix to train MURAL forests on
+    @param labels the labels used for coloring plots
+    @param gt the ground truth for DEMaP
+    @param sampled_features the number of features for each node to randomly look at
+    @param batch_size the number of observations to subsample to
+    @param min_leaf size the minimum number of observations needed to split
+    @param decay a parameter that controls how quickly the weight in the missing values node decays
+    @param t_list an array of numbers of trees
+    @param d_list an array of depth parameters
+    @param path the path to a directory to save MURAL embeddings in
     """
 
     if path is None:
@@ -291,6 +307,6 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
 
             test_forest(forest, data, labels, path)
 
-    demap_mural(data, path, t_list, d_list)
+    demap_mural(gt, path, t_list, d_list)
 
     f.close()
