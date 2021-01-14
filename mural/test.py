@@ -271,14 +271,13 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
     f.close()
 
 
-def train_forests(data, labels, gt, sampled_features, batch_size, min_leaf_size=2, 
+def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2, 
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None):
     """
     Train MURAL forests and save them and their embeddings.
 
     @param data the data matrix to train MURAL forests on
     @param labels the labels used for coloring plots
-    @param gt the ground truth for DEMaP
     @param sampled_features the number of features for each node to randomly look at
     @param batch_size the number of observations to subsample to
     @param min_leaf size the minimum number of observations needed to split
@@ -306,7 +305,5 @@ def train_forests(data, labels, gt, sampled_features, batch_size, min_leaf_size=
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
             test_forest(forest, data, labels, path)
-
-    demap_mural(gt, path, t_list, d_list)
 
     f.close()
