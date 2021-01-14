@@ -476,29 +476,25 @@ class UnsupervisedTree():
         return acc
 
         
-def binary_affinity(leaf_list):
+def binary_affinity(result_list):
     """
-    Calculates the average binary affinity from a list of leaves on each tree.
+    Calculates the average binary affinity from a list of results of each tree.
     
-    @param leaf_list a list of "classification" results for a given sample on each tree
+    @param result_list a list of "classification" results for a given sample on each tree
     @return the elementwise average of binary affinities across all the trees
     """
 
-    M_list = []
+    n = result_list[0].shape[0] # We have this many observations
+    M_acc = np.zeros(shape=(n,n))
 
-    for idx in leaf_list:
-        n = idx.shape[0]
+    for idx in result_list:
         I1 = np.tile(idx, [n,1])
         I2 = np.tile(idx[:,None], [1,n])
         # Force broadcasting to get a binary affinity matrix
         # (Do observations i and j have the same leaf assignment?)
-        M = np.equal(I1, I2).astype("int")
-        M_list.append(M)
+        M_acc += np.equal(I1, I2).astype("int")
 
-    M_sum = sum(M_list)
-    M_avg = M_sum / len(M_list)
-
-    return M_avg
+    return M_acc / len(result_list)
 
 
 def adjacency_matrix_from_list(Al):
@@ -570,25 +566,24 @@ def adjacency_to_distances(Al, Ll=None):
     return dist
 
 
-def get_average_distance(D_list, leaf_list):
+def get_average_distance(D_list, result_list):
     """
     Compute the average distance between two observations across all decision trees in a forest.
     @param D_list a list containing the distance matrices for each tree in the given forest
-    @param leaf_list already found list of leaves for each tree
+    @param result_list already found list of results of each tree
     @return the matrix of average distances for the observations in this batch
     """
 
-    M_list = []
+    assert len(D_list) == len(result_list)
 
-    for D, idx in zip(D_list, leaf_list):
+    n = result_list[0].shape[0]
+    M_acc = np.zeros(shape=(n,n))
+
+    for D, idx in zip(D_list, result_list):
         # Choose M(x_i, x_j) to be the distance from leaf(x_i) to leaf(x_j)
-        M = D[idx][:,idx]
-        M_list.append(M)
+        M_acc += D[idx][:,idx]
 
-    M_sum = sum(M_list)
-    M_avg = M_sum / len(M_list)
-
-    return M_avg
+    return M_acc / len(result_list)
 
 
 def load_pickle(path):
