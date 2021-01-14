@@ -185,11 +185,6 @@ class UnsupervisedTree():
             self.index = 0
         else:
             self.root = root
-            self.Al = root.Al
-            self.Ll = root.Ll
-
-            # Link to the root's RNG
-            self.rng = self.root.rng
 
             self.weight = weight
 
@@ -202,9 +197,6 @@ class UnsupervisedTree():
         self.decay = decay
 
         if parent is not None:
-            # Maintain a link between the node an its parent in case of need for traversal
-            self.parent = parent
-            
             # Update the adjacency list
             self.root.Al[self.index].append((self.parent.index, weight))
             self.root.Al[self.parent.index].append((self.index, weight))
@@ -250,9 +242,9 @@ class UnsupervisedTree():
         self.root.Al.append([])
 
         # Randomly choose the features for each branch
-        m_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        l_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        h_branch_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
@@ -391,7 +383,7 @@ class UnsupervisedTree():
         A simple way to visualize this tree.
         """
 
-        M = adjacency_matrix_from_list(self.Al)
+        M = adjacency_matrix_from_list(self.root.Al)
         G = nx.from_numpy_matrix(M)
 
         pos = nx.drawing.nx_pydot.graphviz_layout(G, "dot", root=0)
@@ -409,7 +401,7 @@ class UnsupervisedTree():
         n_p = p.shape[0]
         n_q = q.shape[0]
 
-        V = len(self.Al)
+        V = len(self.root.Al)
         p_results = np.zeros(V)
         q_results = np.zeros(V)
 
@@ -450,7 +442,7 @@ class UnsupervisedTree():
         the tree-Wasserstein metric.
         """
 
-        Al = self.Al
+        Al = self.root.Al
         n = len(Al)
         acc = 0
 
