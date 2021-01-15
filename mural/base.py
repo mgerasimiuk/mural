@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
 
+EPSILON = np.finfo(float).eps
+
 class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
@@ -272,7 +274,7 @@ class UnsupervisedTree():
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
 
         dist_full = np.histogram(X_sorted, bins=total_bins, density=True)[0]   
-        H_full = -1 * np.sum(dist_full * np.log(dist_full))
+        H_full = -1 * np.sum(dist_full * np.log(dist_full + EPSILON))
         if H_full <= self.score:
             # Then we will not get a higher information gain with this variable
             return
