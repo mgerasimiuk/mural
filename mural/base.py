@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
 
-EPSILON = np.finfo(np.float32).eps 
+EPSILON = np.finfo(float).eps
 
 class UnsupervisedForest():
     """
@@ -321,8 +321,8 @@ class UnsupervisedTree():
             dist_high = np.histogram(X_sorted[j:], bins=bins_high, density=True)[0]
             
             # Calculate Shannon entropy of the resulting distributions
-            H_low = -1 * np.sum(dist_low * np.log(dist_low))
-            H_high = -1 * np.sum(dist_high * np.log(dist_high))
+            H_low = -1 * np.sum(dist_low * np.log(dist_low + EPSILON))
+            H_high = -1 * np.sum(dist_high * np.log(dist_high + EPSILON))
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
             score = H_full - (j / X_sorted.shape[0]) * H_low - (1 - j / X_sorted.shape[0]) * H_high
