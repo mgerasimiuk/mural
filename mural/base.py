@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
 
-EPSILON = np.finfo(float).eps
+EPSILON = np.finfo(np.float32).eps 
 
 class UnsupervisedForest():
     """
