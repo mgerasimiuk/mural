@@ -200,8 +200,8 @@ class UnsupervisedTree():
 
         if parent is not None:
             # Update the adjacency list
-            self.root.Al[self.index].append((self.parent.index, weight))
-            self.root.Al[self.parent.index].append((self.index, weight))
+            self.root.Al[self.index].append((parent.index, weight))
+            self.root.Al[parent.index].append((self.index, weight))
 
         # Score is to be maximized by splits
         self.score = np.NINF
