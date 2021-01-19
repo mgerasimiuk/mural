@@ -37,7 +37,8 @@ def make_embedded_swiss_roll(dims=3):
 
     # Generate Swiss Roll
     x, labels = make_swiss_roll(n_samples=3000, random_state=42)
-    x = np.dot(x, special_ortho_group.rvs(dims)[:3])
+    if dims > 3:
+        x = np.dot(x, special_ortho_group.rvs(dims)[:3])
 
     # Standardize with mean and standard deviation
     standardized_X = preprocessing.scale(x, with_mean=True, with_std=True)
