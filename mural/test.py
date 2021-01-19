@@ -8,7 +8,7 @@ import phate
 from sklearn.manifold import TSNE
 from sklearn import preprocessing
 from scipy.stats import special_ortho_group
-from sklearn.datasets import make_swiss_roll
+from sklearn.datasets import make_swiss_roll, make_moons
 import demap
 import os
 
@@ -44,6 +44,24 @@ def make_embedded_swiss_roll(dims=3):
 
     return standardized_X, labels
 
+
+def make_embedded_moons(dims=2):
+    """
+    Make a dataset of the two moons manifold embedded in multiple dimensions.
+
+    @param dims the number of dimensions to embed in
+    @return the data matrix for the embedded moons
+    """
+    assert dims >= 2
+
+    # Generate moons
+    x, labels = make_moons(n_samples=3000, random_state=42)
+    x = np.dot(x, special_ortho_group.rvs(dims)[:2])
+
+    # Standardize with mean and standard deviation
+    standardized_X = preprocessing.scale(x, with_mean=True, with_std=True)
+
+    return standardized_X, labels
 
 def make_splatter():
     """
