@@ -77,6 +77,7 @@ def make_splatter():
 
     return data_true, data_noisy
 
+
 def make_tree(n_dim=100, n_branch=10, branch_length=300, rand_multiplier=2, seed=37, sigma=4):
 
     return phate.tree.gen_dla(n_dim=n_dim, n_branch=n_branch, branch_length=branch_length,
@@ -237,7 +238,7 @@ def test_forest(forest, data, labels, path=None):
     b_forest = base.binary_affinity(forest_fitted)
 
     # Plot binary affinities with PHATE by passing in affinity matrix
-    phate_b = phate.PHATE(knn_dist="precomputed_distance")
+    phate_b = phate.PHATE(knn_dist="precomputed_affinity")
     phate_fit_b = phate_b.fit_transform(b_forest)
     np.save(f"{path}/{num_trees}trees{depth}depth/binary_mural", phate_fit_b)
 
