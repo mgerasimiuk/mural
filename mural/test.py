@@ -103,7 +103,6 @@ def make_missing_middle(data, n_missing, idxs=None):
 
     for idx, num in zip(idxs, n_missing):
         col = new_missing[:, idx]
-        avg = np.mean(col)
         q1 = np.quantile(col, 0.25)
         q3 = np.quantile(col, 0.75)
 
@@ -111,8 +110,39 @@ def make_missing_middle(data, n_missing, idxs=None):
         where_iqr = np.nonzero(mask)[0]
         to_del = np.random.choice(where_iqr, size=num, replace=False)
 
-        new_missing[to_del, idx] = None
-        new_imputed[to_del, idx] = avg
+        new_missing[to_del, idx] = np.nan
+        new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
+
+    return new_missing, new_imputed
+
+
+def make_missing_random(data, n_missing, idxs=None):
+    """
+    Take a dataset and create two datasets, one with missing (NaN)
+    values randomly, another with all NaNs replaced with the mean.
+
+    @param data the data matrix
+    @param n_missing an array with numbers of observations with missing values in each column
+    @param idxs the column indices to do this process in
+    @return two data matrices
+    """
+
+    d = data.shape[1]
+    n = data.shape[0]
+
+    if idxs is None:
+        idxs = np.arange(d)
+    elif len(idxs) > d:
+        print("Error: Too many values selected")
+        return
+
+    new_missing, new_imputed = np.copy(data), np.copy(data)
+
+    for idx, num in zip(idxs, n_missing):
+        to_del = np.random.choice(np.arange(n), size=num, replace=False)
+
+        new_missing[to_del, idx] = np.nan
+        new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
 
     return new_missing, new_imputed
 
