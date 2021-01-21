@@ -77,6 +77,11 @@ def make_splatter():
 
     return data_true, data_noisy
 
+def make_tree(n_dim=100, n_branch=10, branch_length=300, rand_multiplier=2, seed=37, sigma=4):
+
+    return phate.tree.gen_dla(n_dim=n_dim, n_branch=n_branch, branch_length=branch_length,
+                              rand_multiplier=rand_multiplier, seed=seed, sigma=sigma)
+
 
 def make_missing_middle(data, n_missing, idxs=None):
     """
