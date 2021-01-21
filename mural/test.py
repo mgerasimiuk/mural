@@ -113,6 +113,9 @@ def make_missing_middle(data, n_missing, idxs=None):
         new_missing[to_del, idx] = np.nan
         new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
 
+    new_missing = preprocessing.scale(new_missing, with_mean=True, with_std=True)
+    new_imputed = preprocessing.scale(new_imputed, with_mean=True, with_std=True)
+
     return new_missing, new_imputed
 
 
@@ -143,6 +146,9 @@ def make_missing_random(data, n_missing, idxs=None):
 
         new_missing[to_del, idx] = np.nan
         new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
+
+    new_missing = preprocessing.scale(new_missing, with_mean=True, with_std=True)
+    new_imputed = preprocessing.scale(new_imputed, with_mean=True, with_std=True)
 
     return new_missing, new_imputed
 
