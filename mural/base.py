@@ -16,13 +16,13 @@ class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
-    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth, min_leaf_size, decay=None):
+    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, decay=None, missing_profile=1):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
         @param n_estimators number of trees
         @param n_sampled_features number of features that each node chooses one from, alternatively
-        log base 2 ("log") or square root ("sqrt") of the total number of features
+        log base 2 ("log") or square root ("sqrt") of the total number of features (BAD DO NOT USE!!!)
         @param batch_size number of observations each tree fits on, if None, then all observations are used
         @param depth the maximum height of the trees
         @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
@@ -44,8 +44,17 @@ class UnsupervisedForest():
         elif n_sampled_features == "sqrt":
             self.n_sampled_features = int(np.sqrt(X.shape[1]))
         else:
-            assert(n_sampled_features <= X.shape[1])
+            assert (n_sampled_features <= X.shape[1])
             self.n_sampled_features = n_sampled_features
+
+        if missing_profile == 1:
+            self.missing_profile = np.ones(shape=X.shape[1])
+        elif missing_profile == 0:
+            self.missing_profile = np.zeros(shape=X.shape[1])
+        else:
+            assert (len(missing_profile) == X.shape[1])
+            assert (np.all(missing_profile >= 0 and missing_profile <= 1))
+            self.missing_profile = missing_profile
 
         self.X = X
         self.n_estimators = n_estimators
@@ -75,7 +84,7 @@ class UnsupervisedForest():
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=0, decay=self.decay, rng=self.rng)
+                                weight=0, decay=self.decay, missing_profile=self.missing_profile, rng=self.rng)
     
     def apply(self, x):
         """
@@ -147,7 +156,7 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
-                 min_leaf_size, weight, decay, root=None, parent=None, rng=None):
+                 min_leaf_size, weight, decay, missing_profile=1, root=None, parent=None, rng=None):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -169,6 +178,15 @@ class UnsupervisedTree():
             self.chosen_inputs = np.arange[X.shape[0]]
         else:
             self.chosen_inputs = chosen_inputs
+
+        if missing_profile == 1:
+            self.missing_profile = np.ones(shape=X.shape[1])
+        elif missing_profile == 0:
+            self.missing_profile = np.zeros(shape=X.shape[1])
+        else:
+            assert (len(missing_profile) == X.shape[1])
+            assert (np.all(missing_profile >= 0 and missing_profile <= 1))
+            self.missing_profile = missing_profile
 
         if root is None:
             self.root = self
@@ -252,13 +270,13 @@ class UnsupervisedTree():
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
         self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[where_missing], m_branch_features, 
                                         self.depth - 1, self.min_leaf_size, self.weight * self.decay,
-                                        self.decay, root=self.root, parent=self)
+                                        self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
         self.low = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_low], l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                    self.decay, root=self.root, parent=self)
+                                    self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
         self.high = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_high], h_branch_features, 
                                      self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                     self.decay, root=self.root, parent=self)
+                                     self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
 
     def find_better_split(self, index):
         """
