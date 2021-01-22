@@ -179,15 +179,6 @@ class UnsupervisedTree():
         else:
             self.chosen_inputs = chosen_inputs
 
-        if missing_profile == 1:
-            self.missing_profile = np.ones(shape=X.shape[1])
-        elif missing_profile == 0:
-            self.missing_profile = np.zeros(shape=X.shape[1])
-        else:
-            assert (len(missing_profile) == X.shape[1])
-            assert (np.all(missing_profile >= 0 and missing_profile <= 1))
-            self.missing_profile = missing_profile
-
         if root is None:
             self.root = self
             
@@ -195,6 +186,15 @@ class UnsupervisedTree():
             self.Al = [[]]
             # Create the leaf list to speed up getting distances
             self.Ll = []
+
+            if missing_profile == 1:
+                self.missing_profile = np.ones(shape=X.shape[1])
+            elif missing_profile == 0:
+                self.missing_profile = np.zeros(shape=X.shape[1])
+            else:
+                assert (len(missing_profile) == X.shape[1])
+                assert (np.all(missing_profile >= 0 and missing_profile <= 1))
+                self.missing_profile = missing_profile
 
             # Link to the forest's RNG
             self.rng = rng
@@ -246,8 +246,21 @@ class UnsupervisedTree():
             self.root.Ll.append(self.index)
             return
               
-        split_column = self.split_column()
+        split_column = self.split_column() # This is the whole column, not just the feature index
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
+        profile = int(self.root.missing_profile[self.split_feature] * len(where_missing))
+        permute = self.root.rng.permutation(where_missing)
+        to_missing = permute[0:profile] # These go to the missing node
+        to_rest = permute[profile:] # These go to 50/50 to the other two
+
+        if profile != len(where_missing):
+            half = len(where_missing) // 2
+            permute = self.root.rng.permutation(to_rest)
+            missing_to_low = self.chosen_inputs[permute[0:half]] # Row indices in X
+            missing_to_high = self.chosen_inputs[permute[half:]]
+        else:
+            missing_to_low = []
+            missing_to_high = []
 
         not_missing = np.nonzero(~np.isnan(split_column))[0]
         among_chosen = self.chosen_inputs[not_missing] # Subset of chosen_inputs, row indices in X
@@ -255,6 +268,10 @@ class UnsupervisedTree():
 
         where_low = np.nonzero(complete_cases <= self.threshold)[0] # Indices in the subset
         where_high = np.nonzero(complete_cases > self.threshold)[0]
+    
+        # Randomly apportion randomly missing values
+        joint_low = np.concatenate(among_chosen[where_low], missing_to_low, axis=None) # Row indices in X
+        joint_high = np.concatenate(among_chosen[where_high], missing_to_high, axis=None)
         
         # Add new nodes to the adjacency list
         self.root.Al.append([])
@@ -268,15 +285,15 @@ class UnsupervisedTree():
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
-        self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[where_missing], m_branch_features, 
+        self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[to_missing], m_branch_features, 
                                         self.depth - 1, self.min_leaf_size, self.weight * self.decay,
-                                        self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
-        self.low = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_low], l_branch_features, 
+                                        self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
+        self.low = UnsupervisedTree(self.X, self.n_sampled_features, joint_low, l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                    self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
-        self.high = UnsupervisedTree(self.X, self.n_sampled_features, among_chosen[where_high], h_branch_features, 
+                                    self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
+        self.high = UnsupervisedTree(self.X, self.n_sampled_features, joint_high, h_branch_features, 
                                      self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                     self.decay, missing_profile=self.missing_profile, root=self.root, parent=self)
+                                     self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
 
     def find_better_split(self, index):
         """
@@ -284,9 +301,11 @@ class UnsupervisedTree():
         that leads to the biggest information gain when split on.
         """
 
+        # Should I add missing ones into the entropy??
+
         # Make a sorted list of values in this variable and get rid of missingness
         X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
-        X_sorted = X_sorted[~np.isnan(X_sorted)]
+        X_sorted = X_sorted[~np.isnan(X_sorted)] # This should be faster the other way around...
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
@@ -373,12 +392,22 @@ class UnsupervisedTree():
         go to the designated child node, else split by comparing with threshold value.
         """
 
+        is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
+
+        prob = self.root.missing_profile[self.split_feature]
+        rolled = self.root.rng.random() <= prob
+
+        if is_missing and not rolled:
+            auto_low = self.rng.choice([True, False])
+        else:
+            auto_low = False
+
         if self.is_leaf():
             # Recursion base case. Say which leaf the observation ends in.
             return self.index
-        elif x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature]):
+        elif is_missing and rolled:
             t = self.missing
-        elif x_i[self.split_feature] <= self.threshold:
+        elif auto_low or x_i[self.split_feature] <= self.threshold:
             t = self.low
         else:
             t = self.high
@@ -442,12 +471,22 @@ class UnsupervisedTree():
 
         x_results[self.index] += 1
 
+        is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
+
+        prob = self.root.missing_profile[self.split_feature]
+        rolled = self.root.rng.random() <= prob
+
+        if is_missing and not rolled:
+            auto_low = self.rng.choice([True, False])
+        else:
+            auto_low = False
+
         if self.is_leaf():
             # Recursion base case.
             return
-        elif x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature]):
+        elif is_missing and rolled:
             t = self.missing
-        elif x_i[self.split_feature] <= self.threshold:
+        elif auto_low or x_i[self.split_feature] <= self.threshold:
             t = self.low
         else:
             t = self.high
