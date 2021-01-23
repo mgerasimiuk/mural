@@ -61,7 +61,7 @@ class UnsupervisedForest():
                 raise ValueError
         else:
             assert (len(missing_profile) == X.shape[1])
-            assert (np.all(missing_profile >= 0 and missing_profile <= 1))
+            assert (np.all(missing_profile >= 0) and np.all(missing_profile <= 1))
             self.missing_profile = missing_profile
 
         self.X = X
