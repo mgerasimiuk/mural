@@ -413,6 +413,10 @@ class UnsupervisedTree():
         go to the designated child node, else split by comparing with threshold value.
         """
 
+        if self.is_leaf():
+            # Recursion base case. Say which leaf the observation ends in.
+            return self.index
+        
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
@@ -423,10 +427,7 @@ class UnsupervisedTree():
         else:
             auto_low = False
 
-        if self.is_leaf():
-            # Recursion base case. Say which leaf the observation ends in.
-            return self.index
-        elif is_missing and rolled:
+        if is_missing and rolled:
             t = self.missing
         elif auto_low or x_i[self.split_feature] <= self.threshold:
             t = self.low
@@ -494,6 +495,10 @@ class UnsupervisedTree():
         x_results[self.index, 1] = self.split_feature
         x_results[self.index, 2] = self.threshold
 
+        if self.is_leaf():
+            # Recursion base case.
+            return
+        
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
@@ -504,10 +509,7 @@ class UnsupervisedTree():
         else:
             auto_low = False
 
-        if self.is_leaf():
-            # Recursion base case.
-            return
-        elif is_missing and rolled:
+        if is_missing and rolled:
             t = self.missing
         elif auto_low or x_i[self.split_feature] <= self.threshold:
             t = self.low
