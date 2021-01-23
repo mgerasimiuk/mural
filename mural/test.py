@@ -211,7 +211,7 @@ def make_embeddings(data, labels, path=None):
     np.save(f"{path}/non_mural/phate.npy", phate_orig)
 
 
-def test_forest(forest, data, labels, path=None, old_weights=False):
+def test_forest(forest, data, labels, path=None, geometric=False):
     """
     Perform tests for a MURAL forest and saves embeddings and plots.
 
@@ -250,7 +250,7 @@ def test_forest(forest, data, labels, path=None, old_weights=False):
                           filename=f"{path}/{num_trees}trees{depth}depth/binary")
 
     # For exponential affinities
-    D_list = [base.adjacency_to_distances(A, L, geometric=old_weights) for A, L in zip(forest.adjacency(), forest.leaves())]
+    D_list = [base.adjacency_to_distances(A, L, geometric=geometric) for A, L in zip(forest.adjacency(), forest.leaves())]
     avg_distance = base.get_average_distance(D_list, forest_fitted)
 
     # Plot exponential affinities with PHATE by passing in distance matrix
@@ -334,7 +334,7 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
 
 def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2, 
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None,
-                  missing_profile=1, weighted=True, optimize="max"):
+                  missing_profile=1, weighted=True, geometric=False, optimize="max"):
     """
     Train MURAL forests and save them and their embeddings.
 
@@ -367,6 +367,6 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
-            test_forest(forest, data, labels, path, old_weights=(not weighted))
+            test_forest(forest, data, labels, path, geometric=geometric)
 
     f.close()
