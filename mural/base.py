@@ -16,7 +16,8 @@ class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
-    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, decay=None, missing_profile=1):
+    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, decay=None, missing_profile=1,
+                 weighted=True):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -61,6 +62,9 @@ class UnsupervisedForest():
         self.depth = depth
         self.min_leaf_size = min_leaf_size
 
+        # Experiment with unweighted (all 1) edges
+        self.weighted = weighted
+
         if decay is None:
             self.decay = 0.5
         else:
@@ -84,7 +88,7 @@ class UnsupervisedForest():
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=0, decay=self.decay, missing_profile=self.missing_profile, rng=self.rng)
+                                weight=0, decay=self.decay, forest=self, rng=self.rng, weighted=self.weighted)
     
     def apply(self, x):
         """
@@ -156,7 +160,8 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
-                 min_leaf_size, weight, decay, missing_profile=1, root=None, parent=None, rng=None):
+                 min_leaf_size, weight, decay, root=None, parent=None, forest=None, rng=None,
+                 weighted=True):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -181,25 +186,21 @@ class UnsupervisedTree():
 
         if root is None:
             self.root = self
+
+            self.weighted = weighted
             
             # Create the adjacency list
             self.Al = [[]]
             # Create the leaf list to speed up getting distances
             self.Ll = []
 
-            if missing_profile == 1:
-                self.missing_profile = np.ones(shape=X.shape[1])
-            elif missing_profile == 0:
-                self.missing_profile = np.zeros(shape=X.shape[1])
-            else:
-                assert (len(missing_profile) == X.shape[1])
-                assert (np.all(missing_profile >= 0 and missing_profile <= 1))
-                self.missing_profile = missing_profile
+            # Will use this to access missing_profile
+            self.forest = forest
 
             # Link to the forest's RNG
             self.rng = rng
             
-            self.weight = 2 ** depth
+            self.weight = 2 ** (depth - 1)
 
             UnsupervisedTree.index_counter = 1
             self.index = 0
@@ -218,6 +219,9 @@ class UnsupervisedTree():
 
         if parent is not None:
             # Update the adjacency list
+            if not weighted:
+                weight = 1
+            
             self.root.Al[self.index].append((parent.index, weight))
             self.root.Al[parent.index].append((self.index, weight))
 
@@ -248,7 +252,9 @@ class UnsupervisedTree():
               
         split_column = self.split_column() # This is the whole column, not just the feature index
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
-        profile = int(self.root.missing_profile[self.split_feature] * len(where_missing))
+
+        # Split missing values between regular nodes and missing node based on missing_profile
+        profile = int(self.root.forest.missing_profile[self.split_feature] * len(where_missing))
         permute = self.root.rng.permutation(where_missing)
         to_missing = permute[0:profile] # These go to the missing node
         to_rest = permute[profile:] # These go to 50/50 to the other two
@@ -287,13 +293,13 @@ class UnsupervisedTree():
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
         self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[to_missing], m_branch_features, 
                                         self.depth - 1, self.min_leaf_size, self.weight * self.decay,
-                                        self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
+                                        self.decay, root=self.root, parent=self)
         self.low = UnsupervisedTree(self.X, self.n_sampled_features, joint_low, l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                    self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
+                                    self.decay, root=self.root, parent=self)
         self.high = UnsupervisedTree(self.X, self.n_sampled_features, joint_high, h_branch_features, 
                                      self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                     self.decay, missing_profile=self.root.missing_profile, root=self.root, parent=self)
+                                     self.decay, root=self.root, parent=self)
 
     def find_better_split(self, index):
         """
@@ -394,7 +400,7 @@ class UnsupervisedTree():
 
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-        prob = self.root.missing_profile[self.split_feature]
+        prob = self.root.forest.missing_profile[self.split_feature]
         rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
@@ -473,7 +479,7 @@ class UnsupervisedTree():
 
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-        prob = self.root.missing_profile[self.split_feature]
+        prob = self.root.forest.missing_profile[self.split_feature]
         rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
@@ -573,7 +579,7 @@ def adjacency_matrix_from_list(Al):
     return Am
 
 
-def adjacency_to_distances(Al, Ll=None):
+def adjacency_to_distances(Al, Ll=None, geometric=False):
     """
     Takes adjacency list and returns a distance matrix on its decision tree.
     Manually runs breadth-first search to avoid calling networkx methods
@@ -622,6 +628,12 @@ def adjacency_to_distances(Al, Ll=None):
                     q.append(j)
 
     # The distance matrix for this tree is now done
+
+    if geometric:
+        mask = np.nonzero(dist == 0) # Pairs of arguments in the same leaves
+        dist = 2 ** (dist - 1) # Reweight paths
+        dist[mask] = 0 # But keep zero distances
+
     return dist
 
 
