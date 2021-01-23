@@ -16,8 +16,8 @@ class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
-    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, decay=None, missing_profile=1,
-                 weighted=True):
+    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, 
+                 decay=None, missing_profile=1, weighted=True, optimize="max"):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -64,6 +64,9 @@ class UnsupervisedForest():
 
         # Experiment with unweighted (all 1) edges
         self.weighted = weighted
+        # Experiment with different objective
+        assert (optimize == "max" or optimize == "min")
+        self.optimize = optimize
 
         if decay is None:
             self.decay = 0.5
@@ -88,7 +91,7 @@ class UnsupervisedForest():
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=0, decay=self.decay, forest=self, rng=self.rng, weighted=self.weighted)
+                                weight=2 ** (self.depth - 1), decay=self.decay, forest=self)
     
     def apply(self, x):
         """
@@ -159,8 +162,7 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
-                 min_leaf_size, weight, decay, root=None, parent=None, forest=None, rng=None,
-                 weighted=True):
+                 min_leaf_size, weight, decay=0.5, root=None, parent=None, forest=None):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -173,7 +175,6 @@ class UnsupervisedTree():
         @param decay the factor by which the weight for missing value nodes decays
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
-        @param rng a random number generator
         """
 
         self.X = X
@@ -185,19 +186,14 @@ class UnsupervisedTree():
 
         if root is None:
             self.root = self
-
-            self.weighted = weighted
             
             # Create the adjacency list
             self.Al = [[]]
             # Create the leaf list to speed up getting distances
             self.Ll = []
 
-            # Will use this to access missing_profile
+            # Will use this to access shared data
             self.forest = forest
-
-            # Link to the forest's RNG
-            self.rng = rng
             
             self.weight = 2 ** (depth - 1)
 
@@ -218,14 +214,18 @@ class UnsupervisedTree():
 
         if parent is not None:
             # Update the adjacency list
-            if not weighted:
+            if not self.root.forest.weighted:
                 weight = 1
             
             self.root.Al[self.index].append((parent.index, weight))
             self.root.Al[parent.index].append((self.index, weight))
 
         # Score is to be maximized by splits
-        self.score = np.NINF
+        if self.root.forest.optimize == "max":
+            self.score = np.NINF
+        # Experimental alternative objective
+        elif self.root.forest.optimize == "min":
+            self.score = np.INF
 
         # This step fits the tree
         self.find_split()
@@ -244,7 +244,7 @@ class UnsupervisedTree():
             # Look for the best decision (if any are possible)
             self.find_better_split(var_index)
         
-        if self.score == np.NINF:
+        if self.score == np.NINF or self.score == np.INF:
             # Do not split the data if decisions exhausted
             self.root.Ll.append(self.index)
             return
@@ -254,13 +254,13 @@ class UnsupervisedTree():
 
         # Split missing values between regular nodes and missing node based on missing_profile
         profile = int(self.root.forest.missing_profile[self.split_feature] * len(where_missing))
-        permute = self.root.rng.permutation(where_missing)
+        permute = self.root.forest.rng.permutation(where_missing)
         to_missing = permute[0:profile] # These go to the missing node
         to_rest = permute[profile:] # These go to 50/50 to the other two
 
         if profile != len(where_missing):
             half = len(where_missing) // 2
-            permute = self.root.rng.permutation(to_rest)
+            permute = self.root.forest.rng.permutation(to_rest)
             missing_to_low = self.chosen_inputs[permute[0:half]] # Row indices in X
             missing_to_high = self.chosen_inputs[permute[half:]]
         else:
@@ -284,9 +284,9 @@ class UnsupervisedTree():
         self.root.Al.append([])
 
         # Randomly choose the features for each branch
-        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        m_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        l_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        h_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
@@ -317,7 +317,8 @@ class UnsupervisedTree():
 
         dist_full = np.histogram(X_sorted, bins=total_bins, density=True)[0]   
         H_full = -1 * np.sum(dist_full * np.log(dist_full + EPSILON))
-        if H_full <= self.score:
+
+        if self.root.forest.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
             return
 
@@ -367,17 +368,26 @@ class UnsupervisedTree():
             H_high = -1 * np.sum(dist_high * np.log(dist_high + EPSILON))
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
-            score = H_full - (j / X_sorted.shape[0]) * H_low - (1 - j / X_sorted.shape[0]) * H_high
-            if score > self.score:
-                self.split_feature = index
-                self.score = score
-                self.threshold = x_j
+            H_splits = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
+
+            if self.root.forest.optimize == "max":
+                score = H_full - H_splits
+                if score > self.score:
+                    self.split_feature = index
+                    self.score = score
+                    self.threshold = x_j
+            elif self.root.forest.optimize == "min":
+                score = H_splits
+                if score < self.score:
+                    self.split_feature = index
+                    self.score = score
+                    self.threshold = x_j
 
     def is_leaf(self):
         """
         Checks if we reached a leaf.
         """
-        return self.score == np.NINF or self.depth <= 0
+        return self.score == np.NINF or self.score == np.INF or self.depth <= 0
 
     def split_column(self):
         """
@@ -400,10 +410,10 @@ class UnsupervisedTree():
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
-        rolled = self.root.rng.random() <= prob
+        rolled = self.root.forest.rng.random() <= prob
 
         if is_missing and not rolled:
-            auto_low = self.rng.choice([True, False])
+            auto_low = self.root.forest.rng.choice([True, False])
         else:
             auto_low = False
 
@@ -481,10 +491,10 @@ class UnsupervisedTree():
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
-        rolled = self.root.rng.random() <= prob
+        rolled = self.root.forest.rng.random() <= prob
 
         if is_missing and not rolled:
-            auto_low = self.rng.choice([True, False])
+            auto_low = self.root.forest.rng.choice([True, False])
         else:
             auto_low = False
 
