@@ -281,8 +281,8 @@ class UnsupervisedTree():
         where_high = np.nonzero(complete_cases > self.threshold)[0]
     
         # Randomly apportion randomly missing values
-        joint_low = np.concatenate((among_chosen[where_low], missing_to_low), axis=None) # Row indices in X
-        joint_high = np.concatenate((among_chosen[where_high], missing_to_high), axis=None)
+        joint_low = np.array(np.concatenate((among_chosen[where_low], missing_to_low), axis=None), dtype=int) # Row indices in X
+        joint_high = np.array(np.concatenate((among_chosen[where_high], missing_to_high), axis=None), dtype=int)
         
         # Add new nodes to the adjacency list
         self.root.Al.append([])
