@@ -367,6 +367,6 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
-            test_forest(forest, data, labels, path)
+            test_forest(forest, data, labels, path, old_weights=(not weighted))
 
     f.close()
