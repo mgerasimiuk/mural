@@ -230,7 +230,7 @@ class UnsupervisedTree():
             self.score = np.NINF
         # Experimental alternative objective
         elif self.root.forest.optimize == "min":
-            self.score = np.INF
+            self.score = np.inf
 
         # This step fits the tree
         self.find_split()
@@ -249,7 +249,7 @@ class UnsupervisedTree():
             # Look for the best decision (if any are possible)
             self.find_better_split(var_index)
         
-        if self.score == np.NINF or self.score == np.INF:
+        if self.score == np.NINF or self.score == np.inf:
             # Do not split the data if decisions exhausted
             self.root.Ll.append(self.index)
             return
@@ -393,7 +393,7 @@ class UnsupervisedTree():
         """
         Checks if we reached a leaf.
         """
-        return self.score == np.NINF or self.score == np.INF or self.depth <= 0
+        return self.score == np.NINF or self.score == np.inf or self.depth <= 0
 
     def split_column(self):
         """
@@ -612,7 +612,7 @@ def adjacency_to_distances(Al, Ll=None, geometric=False):
     if Ll is None:
         Ll = range(0, n)
 
-    dist = np.full((n, n), np.Infinity)
+    dist = np.full((n, n), np.inf)
     np.fill_diagonal(dist, 0)
 
     # The steps below compute shortest paths by calling BFS from each node
