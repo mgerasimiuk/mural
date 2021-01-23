@@ -28,6 +28,10 @@ class UnsupervisedForest():
         @param depth the maximum height of the trees
         @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
         @param decay the factor by which the weight decays for missing value nodes
+        @param missing_profile an array whose length is the number of features or {0,1}, default=1 -
+        probabilities (confidence) that each feature is missing not at random
+        @param weighted True (default) or False (to use equal weights)
+        @param optimize "max" (default) or "min" (to use old splitting objective)
         """
 
         # Measure time to evaluate model efficiency
@@ -175,6 +179,7 @@ class UnsupervisedTree():
         @param decay the factor by which the weight for missing value nodes decays
         @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
         @param parent the handle of the parent of this node, if None, then this tree is marked as root
+        @param forest the handle of the forest that the tree belongs to
         """
 
         self.X = X
@@ -258,6 +263,7 @@ class UnsupervisedTree():
         to_missing = permute[0:profile] # These go to the missing node
         to_rest = permute[profile:] # These go to 50/50 to the other two
 
+        # If there are observations with missingness left:
         if profile != len(where_missing):
             half = len(where_missing) // 2
             permute = self.root.forest.rng.permutation(to_rest)
@@ -275,8 +281,8 @@ class UnsupervisedTree():
         where_high = np.nonzero(complete_cases > self.threshold)[0]
     
         # Randomly apportion randomly missing values
-        joint_low = np.concatenate(among_chosen[where_low], missing_to_low, axis=None) # Row indices in X
-        joint_high = np.concatenate(among_chosen[where_high], missing_to_high, axis=None)
+        joint_low = np.concatenate((among_chosen[where_low], missing_to_low), axis=None) # Row indices in X
+        joint_high = np.concatenate((among_chosen[where_high], missing_to_high), axis=None)
         
         # Add new nodes to the adjacency list
         self.root.Al.append([])
