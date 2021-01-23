@@ -52,10 +52,13 @@ class UnsupervisedForest():
             assert (n_sampled_features <= X.shape[1])
             self.n_sampled_features = n_sampled_features
 
-        if missing_profile == 1:
-            self.missing_profile = np.ones(shape=X.shape[1])
-        elif missing_profile == 0:
-            self.missing_profile = np.zeros(shape=X.shape[1])
+        if type(missing_profile) == int:
+            if missing_profile == 1:
+                self.missing_profile = np.ones(shape=X.shape[1])
+            elif missing_profile == 0:
+                self.missing_profile = np.zeros(shape=X.shape[1])
+            else:
+                raise ValueError
         else:
             assert (len(missing_profile) == X.shape[1])
             assert (np.all(missing_profile >= 0 and missing_profile <= 1))
