@@ -132,9 +132,8 @@ class UnsupervisedForest():
         @param q another cohort
         @return an estimate of the Wasserstein distance between them
         """
-
-        S = sum([tree.wasserstein(p, q) for tree in self.trees])
-        return S / len(self.trees)
+        W_list = [tree.wasserstein(p, q) for tree in self.trees]
+        return sum(W_list) / len(self.trees)
 
     def to_pickle(self, path):
         """
@@ -457,8 +456,8 @@ class UnsupervisedTree():
         n_q = q.shape[0]
 
         V = len(self.root.Al)
-        p_results = np.zeros(V)
-        q_results = np.zeros(V)
+        p_results = np.zeros(shape=(V, 3))
+        q_results = np.zeros(shape=(V, 3))
 
         for p_i in p:
             self.apply_wasserstein(p_i, p_results)
@@ -475,7 +474,9 @@ class UnsupervisedTree():
         recursively traversing the whole tree.
         """
 
-        x_results[self.index] += 1
+        x_results[self.index, 0] += 1
+        x_results[self.index, 1] = self.split_feature
+        x_results[self.index, 2] = self.threshold
 
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
@@ -533,7 +534,7 @@ class UnsupervisedTree():
                     visited[j] = 1
 
                     # See how many points from p and q are in the subtree rooted at the child node
-                    acc += w * np.abs((p_results[j] / n_p) - (q_results[j] / n_q))
+                    acc += w * np.abs((p_results[j, 0] / n_p) - (q_results[j, 0] / n_q))
 
                     # Add j to the queue so that we can visit its neighbors later
                     queue.append(j)
