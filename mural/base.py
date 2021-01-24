@@ -6,6 +6,8 @@ import pickle
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
+from joblib import Parallel, delayed
+import multiprocessing
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
@@ -81,42 +83,64 @@ class UnsupervisedForest():
             self.decay = decay
 
         self.rng = np.random.default_rng()
+
+        ss = np.random.SeedSequence(12345)
+        child_seeds = ss.spawn(n_estimators)
+        streams = [np.random.default_rng(s) for s in child_seeds]
+        
         # This step creates the forest
-        self.trees = [self.create_tree() for i in range(n_estimators)]
+        #self.trees = [self.create_tree() for i in range(n_estimators)]
+
+        self.n_jobs = multiprocessing.cpu_count()
+        self.trees = Parallel(n_jobs=self.n_jobs)(delayed(self.create_tree)(stream, i) for i, stream in enumerate(streams))
         
         toc = time.perf_counter()
         self.time_used = toc - tic
         print(f"Completed the Unsupervised RF in {self.time_used:0.4f} seconds")
         
-    def create_tree(self):
+    def create_tree(self, rng, root_index=0):
         """
         Create and fit a decision tree to be used by the forest.
+
+        @rng a random number generator
+        @param index nothing, used to parallelize
         """
 
-        chosen_features = np.sort(self.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        chosen_inputs = np.sort(self.rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
+        chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=2 ** (self.depth - 1), decay=self.decay, forest=self)
+                                weight=2 ** (self.depth - 1), rng=rng, decay=self.decay, forest=self, root_index=root_index)
     
     def apply(self, x):
         """
         Apply the fitted model to data.
+
+        @param x the data to apply the tree to
         """
-        return np.array([tree.apply(x) for tree in self.trees])
+
+        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.apply)(x) for tree in self.trees)
+
+        return result
     
     def adjacency(self):
         """
         Get adjacency lists from each tree in a fitted model.
         """
-        return [tree.adjacency() for tree in self.trees]
+
+        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.adjacency)(i) for i, tree in enumerate(self.trees))
+
+        return result
 
     def leaves(self):
         """
         Get lists of leaves for each tree in a fitted model.
         """
-        return [tree.leaves() for tree in self.trees]
+
+        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.leaves)(i) for i, tree in enumerate(self.trees))
+
+        return result
 
     def draw(self, n=None):
         """
@@ -169,7 +193,7 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
-                 min_leaf_size, weight, decay=0.5, root=None, parent=None, forest=None):
+                 min_leaf_size, weight, rng=None, decay=0.5, root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -194,6 +218,7 @@ class UnsupervisedTree():
 
         if root is None:
             self.root = self
+            self.rng = rng
             
             # Create the adjacency list
             self.Al = [[]]
@@ -262,14 +287,14 @@ class UnsupervisedTree():
 
         # Split missing values between regular nodes and missing node based on missing_profile
         profile = int(self.root.forest.missing_profile[self.split_feature] * len(where_missing))
-        permute = self.root.forest.rng.permutation(where_missing)
+        permute = self.root.rng.permutation(where_missing)
         to_missing = permute[0:profile] # These go to the missing node
         to_rest = permute[profile:] # These go to 50/50 to the other two
 
         # If there are observations with missingness left:
         if profile != len(where_missing):
             half = len(where_missing) // 2
-            permute = self.root.forest.rng.permutation(to_rest)
+            permute = self.root.rng.permutation(to_rest)
             missing_to_low = self.chosen_inputs[permute[0:half]] # Row indices in X
             missing_to_high = self.chosen_inputs[permute[half:]]
         else:
@@ -293,9 +318,9 @@ class UnsupervisedTree():
         self.root.Al.append([])
 
         # Randomly choose the features for each branch
-        m_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        l_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        h_branch_features = np.sort(self.root.forest.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
@@ -423,10 +448,10 @@ class UnsupervisedTree():
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
-        rolled = self.root.forest.rng.random() <= prob
+        rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
-            auto_low = self.root.forest.rng.choice([True, False])
+            auto_low = self.root.rng.choice([True, False])
         else:
             auto_low = False
 
@@ -440,19 +465,19 @@ class UnsupervisedTree():
         # Traverse the tree
         return t.apply_row(x_i)
     
-    def adjacency(self):
+    def adjacency(self, index=0):
         """
         Return the adjacency list of the tree.
         """
         return self.root.Al
 
-    def leaves(self):
+    def leaves(self, index=0):
         """
         Return the list of leaves of this tree.
         """
         return self.root.Ll
 
-    def draw(self):
+    def draw(self, index=0):
         """
         A simple way to visualize this tree.
         """
@@ -505,10 +530,10 @@ class UnsupervisedTree():
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
         prob = self.root.forest.missing_profile[self.split_feature]
-        rolled = self.root.forest.rng.random() <= prob
+        rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
-            auto_low = self.root.forest.rng.choice([True, False])
+            auto_low = self.root.rng.choice([True, False])
         else:
             auto_low = False
 
