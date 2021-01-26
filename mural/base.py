@@ -164,10 +164,12 @@ class UnsupervisedForest():
 
         @param p a cohort
         @param q another cohort
-        @return an estimate of the Wasserstein distance between them
+        @return an estimate of the Wasserstein distance between them, array of averaged importances
         """
         W_list = [tree.wasserstein(p, q) for tree in self.trees]
-        return sum(W_list) / len(self.trees)
+        W_vals = W_list[:, 0]
+        W_imps = np.array(W_list[:, 1])
+        return sum(W_vals) / len(self.trees), np.mean(W_imps, axis=0)
 
     def to_pickle(self, path):
         """
@@ -510,8 +512,18 @@ class UnsupervisedTree():
         for q_i in q:
             self.apply_wasserstein(q_i, q_results)
 
+        diffs = np.empty_like(p_results)
+        diffs[:, 0] = p_results / n_p - q_results / n_q
+        diffs[:, 1] = p_results[:, 1]
+        diffs[:, 2] = p_results[:, 2]
+        diffs = diffs[1:, :2]
+
+        importances = np.zeros(shape=self.X.shape[1]) # Make an array for the importances of all the variables
+        for row in diffs:
+            importances[row[1]] += np.abs(row[0])
+
         W = self.wasserstein_bfs(p_results, n_p, q_results, n_q)
-        return W
+        return [W, importances]
 
     def apply_wasserstein(self, x_i, x_results):
         """
@@ -520,8 +532,13 @@ class UnsupervisedTree():
         """
 
         x_results[self.index, 0] += 1
-        x_results[self.index, 1] = self.split_feature
-        x_results[self.index, 2] = self.threshold
+
+        if self.root == self:
+            x_results[self.index, 1] = None
+            x_results[self.index, 2] = None
+        else:
+            x_results[self.index, 1] = self.parent.split_feature
+            x_results[self.index, 2] = self.parent.threshold
 
         if self.is_leaf():
             # Recursion base case.
