@@ -565,7 +565,7 @@ class UnsupervisedTree():
         t.apply_wasserstein(x_i, x_results)
         return
 
-    def wasserstein_bfs(self, p_results, n_p, q_results, n_q):
+    def wasserstein_bfs(self, diffs):
         """
         Visits each edge of the tree starting from its root to compute
         the tree-Wasserstein metric.
@@ -597,7 +597,7 @@ class UnsupervisedTree():
                     visited[j] = 1
 
                     # See how many points from p and q are in the subtree rooted at the child node
-                    acc += w * np.abs((p_results[j, 0] / n_p) - (q_results[j, 0] / n_q))
+                    acc += w * np.abs(diffs[j - 1, 0])
 
                     # Add j to the queue so that we can visit its neighbors later
                     queue.append(j)
