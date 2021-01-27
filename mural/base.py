@@ -221,6 +221,7 @@ class UnsupervisedTree():
         if root is None:
             self.root = self
             self.rng = rng
+            self.parent = None
             
             # Create the adjacency list
             self.Al = [[]]
@@ -236,6 +237,7 @@ class UnsupervisedTree():
             self.index = 0
         else:
             self.root = root
+            self.parent = parent
 
             self.weight = weight
 
