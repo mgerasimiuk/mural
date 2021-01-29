@@ -20,7 +20,7 @@ class UnsupervisedForest():
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, 
-                 decay=None, missing_profile=1, weighted=True, optimize="max"):
+                 entropy="one", decay=None, missing_profile=1, weighted=True, optimize="max"):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -195,8 +195,8 @@ class UnsupervisedTree():
     """
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
-    def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth,
-                 min_leaf_size, weight, rng=None, decay=0.5, root=None, parent=None, forest=None, root_index=0):
+    def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
+                 weight, entropy="one", rng=None, decay=0.5, root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -607,6 +607,87 @@ class UnsupervisedTree():
         
         return acc
 
+
+def H_one(col):
+    """
+    Get the single-variable entropy of a set.
+
+    @param col a column of data
+    @return the Shannon entropy of the set
+    """
+
+    # Calculate the optimal numbers of bins for the histograms
+    bins = np.histogram_bin_edges(col, bins="auto")
+
+    # Estimate the distributions on each side of the split
+    dist = np.histogram(col, bins=bins, density=True)[0]
+            
+    # Calculate Shannon entropy of the resulting distributions
+    return -1 * np.sum(dist * np.log(dist + EPSILON))
+
+
+def H_spectral(data, num_neighbors):
+    """
+    Get the spectral entropy of a set.
+
+    @param data a dataset
+    @param num_neighbors the number of neighbors
+    @return the von Neumann entropy of the set
+    """
+
+    A = get_nn_graph(data, num_neighbors)
+    return get_spectral_entropy(A)
+
+
+def get_density_matrix(A):
+    """
+    Take a graph adjacency matrix and return a density matrix
+    for the von Neumann entropy calculation.
+
+    @param A the adjacency matrix of a graph
+    @return a density matrix
+    """
+
+    degree = np.diag(np.sum(A, axis=1))
+    L = degree - A # Get the combinatorial graph Laplacian
+    rho = L / np.trace(L)
+
+    return rho
+
+
+def get_spectral_entropy(A):
+    """
+    Get the spectral entropy of a network from its adjacency matrix.
+
+    @param A an adjacency matrix
+    @return the spectral entropy of the network
+    """
+
+    rho = get_density_matrix(A)
+
+    w, v = np.linalg.eigh(rho)
+    H = - np.sum(w * np.log2(w + EPSILON))
+
+    return H
+
+
+def get_nn_graph(imputed_data, num_neighbors, weighted=False):
+    """
+    Get the k nearest neighbor graph of a dataset.
+
+    @param imputed_data a complete dataset
+    @param num_neighbors the number of nearest neighbors
+    @param weighted True or False
+    @return the adjacency matrix of the resulting network
+    """
+    
+    W = kneighbors_graph(imputed_data, num_neighbors).todense()
+
+    if weighted:
+        return W
+    else:
+        return (W > 0).astype(int)
+
         
 def binary_affinity(result_list):
     """
@@ -722,56 +803,6 @@ def get_average_distance(D_list, result_list):
         M_acc += D[idx][:,idx]
 
     return M_acc / len(result_list)
-
-
-def get_density_matrix(A):
-    """
-    Take a graph adjacency matrix and return a density matrix
-    for the von Neumann entropy calculation.
-
-    @param A the adjacency matrix of a graph
-    @return a density matrix
-    """
-
-    degree = np.diag(np.sum(A, axis=1))
-    L = degree - A # Get the combinatorial graph Laplacian
-    rho = L / np.trace(L)
-
-    return rho
-
-
-def get_spectral_entropy(A):
-    """
-    Get the spectral entropy of a network from its adjacency matrix.
-
-    @param A an adjacency matrix
-    @return the spectral entropy of the network
-    """
-
-    rho = get_density_matrix(A)
-
-    w, v = np.linalg.eigh(rho)
-    H = - np.sum(w * np.log2(w))
-
-    return H
-
-
-def get_nn_graph(imputed_data, k, weighted=False):
-    """
-    Get the k nearest neighbor graph of a dataset.
-
-    @param imputed_data a complete dataset
-    @param k the number of nearest neighbors
-    @param weighted True or False
-    @return the adjacency matrix of the resulting network
-    """
-    
-    W = kneighbors_graph(imputed_data, k).todense()
-
-    if weighted:
-        return W
-    else:
-        return (W > 0).astype(int)
 
 
 def load_pickle(path):
