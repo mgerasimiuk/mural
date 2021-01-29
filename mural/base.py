@@ -166,7 +166,7 @@ class UnsupervisedForest():
         @param q another cohort
         @return an estimate of the Wasserstein distance between them, array of averaged importances
         """
-        W_list = [tree.wasserstein(p, q) for tree in self.trees]
+        W_list = np.array([tree.wasserstein(p, q) for tree in self.trees])
         W_vals = W_list[:, 0]
         W_imps = np.array(W_list[:, 1])
         return sum(W_vals) / len(self.trees), np.mean(W_imps, axis=0)
