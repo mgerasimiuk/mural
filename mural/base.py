@@ -8,6 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
+from sklearn.neighbors import kneighbors_graph
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
@@ -753,6 +754,24 @@ def get_spectral_entropy(A):
     H = - np.sum(w * np.log2(w))
 
     return H
+
+
+def get_nn_graph(imputed_data, k, weighted=False):
+    """
+    Get the k nearest neighbor graph of a dataset.
+
+    @param imputed_data a complete dataset
+    @param k the number of nearest neighbors
+    @param weighted True or False
+    @return the adjacency matrix of the resulting network
+    """
+    
+    W = kneighbors_graph(imputed_data, k).todense()
+
+    if weighted:
+        return W
+    else:
+        return (W > 0).astype(int)
 
 
 def load_pickle(path):
