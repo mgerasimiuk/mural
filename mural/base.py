@@ -515,10 +515,10 @@ class UnsupervisedTree():
             self.apply_wasserstein(q_i, q_results)
 
         diffs = np.empty_like(p_results)
-        diffs[:, 0] = p_results[:, 0] / n_p - q_results[:, 0] / n_q
-        diffs[:, 1] = p_results[:, 1]
-        diffs[:, 2] = p_results[:, 2]
-        diffs = diffs[1:, :2]
+        diffs[:, 0] = p_results[:, 0] / n_p - q_results[:, 0] / n_q # probability differences
+        diffs[:, 1] = p_results[:, 1] # Variable indices
+        diffs[:, 2] = p_results[:, 2] # Splitting thresholds - not relevant for variable importances
+        diffs = diffs[1:, :2] # We discard the root because 100% of both cohorts is under it
 
         importances = np.zeros(shape=self.X.shape[1]) # Make an array for the importances of all the variables
         for row in diffs:
@@ -533,13 +533,13 @@ class UnsupervisedTree():
         recursively traversing the whole tree.
         """
 
-        x_results[self.index, 0] += 1
+        x_results[self.index, 0] += 1 # Keep counting observations in this subtree
 
-        if self.root == self:
+        if self.root == self: # We will discard this later, but we need to avoid some errors
             x_results[self.index, 1] = None
             x_results[self.index, 2] = None
         else:
-            x_results[self.index, 1] = self.parent.split_feature
+            x_results[self.index, 1] = self.parent.split_feature # The parent node is the cause of any difference here
             x_results[self.index, 2] = self.parent.threshold
 
         if self.is_leaf():
