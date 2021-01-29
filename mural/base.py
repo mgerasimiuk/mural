@@ -166,7 +166,7 @@ class UnsupervisedForest():
         @param q another cohort
         @return an estimate of the Wasserstein distance between them, array of averaged importances
         """
-        W_list = np.array([tree.wasserstein(p, q) for tree in self.trees])
+        W_list = np.array(Parallel(n_jobs=self.n_jobs)(delayed(tree.wasserstein)(p, q) for tree in self.trees))
         W_vals = W_list[:, 0]
         W_imps = np.array(W_list[:, 1])
         return sum(W_vals) / len(self.trees), np.mean(W_imps, axis=0)
@@ -721,6 +721,38 @@ def get_average_distance(D_list, result_list):
         M_acc += D[idx][:,idx]
 
     return M_acc / len(result_list)
+
+
+def get_density_matrix(A):
+    """
+    Take a graph adjacency matrix and return a density matrix
+    for the von Neumann entropy calculation.
+
+    @param A the adjacency matrix of a graph
+    @return a density matrix
+    """
+
+    degree = np.diag(np.sum(A, axis=1))
+    L = degree - A # Get the combinatorial graph Laplacian
+    rho = L / np.trace(L)
+
+    return rho
+
+
+def get_spectral_entropy(A):
+    """
+    Get the spectral entropy of a network from its adjacency matrix.
+
+    @param A an adjacency matrix
+    @return the spectral entropy of the network
+    """
+
+    rho = get_density_matrix(A)
+
+    w, v = np.linalg.eigh(rho)
+    H = - np.sum(w * np.log2(w))
+
+    return H
 
 
 def load_pickle(path):
