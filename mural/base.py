@@ -515,7 +515,7 @@ class UnsupervisedTree():
             self.apply_wasserstein(q_i, q_results)
 
         diffs = np.empty_like(p_results)
-        diffs[:, 0] = p_results / n_p - q_results / n_q
+        diffs[:, 0] = p_results[:, 0] / n_p - q_results[:, 0] / n_q
         diffs[:, 1] = p_results[:, 1]
         diffs[:, 2] = p_results[:, 2]
         diffs = diffs[1:, :2]
