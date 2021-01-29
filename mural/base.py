@@ -681,7 +681,7 @@ def get_nn_graph(imputed_data, num_neighbors, weighted=False):
     @return the adjacency matrix of the resulting network
     """
     
-    W = kneighbors_graph(imputed_data, num_neighbors).todense()
+    W = kneighbors_graph(imputed_data, num_neighbors).toarray()
 
     if weighted:
         return W
