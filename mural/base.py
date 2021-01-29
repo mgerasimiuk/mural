@@ -524,7 +524,7 @@ class UnsupervisedTree():
         for row in diffs:
             importances[int(row[1])] += np.abs(row[0])
 
-        W = self.wasserstein_bfs(p_results, n_p, q_results, n_q)
+        W = self.wasserstein_bfs(diffs)
         return [W, importances]
 
     def apply_wasserstein(self, x_i, x_results):
