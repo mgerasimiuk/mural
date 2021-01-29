@@ -522,7 +522,7 @@ class UnsupervisedTree():
 
         importances = np.zeros(shape=self.X.shape[1]) # Make an array for the importances of all the variables
         for row in diffs:
-            importances[row[1]] += np.abs(row[0])
+            importances[int(row[1])] += np.abs(row[0])
 
         W = self.wasserstein_bfs(p_results, n_p, q_results, n_q)
         return [W, importances]
