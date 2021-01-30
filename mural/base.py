@@ -26,8 +26,8 @@ class UnsupervisedForest():
     """
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
-    def __init__(self, X, n_estimators, n_sampled_features, batch_size, depth=4, min_leaf_size=2, 
-                 entropy="one", decay=None, missing_profile=1, weighted=True, optimize="max"):
+    def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
+                decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=False):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -75,6 +75,7 @@ class UnsupervisedForest():
             self.missing_profile = missing_profile
 
         self.X = X
+        self.imputed = imputed
         self.n_estimators = n_estimators
         self.depth = depth
         self.min_leaf_size = min_leaf_size
@@ -84,6 +85,7 @@ class UnsupervisedForest():
         # Experiment with different objective
         assert (optimize == "max" or optimize == "min")
         self.optimize = optimize
+        self.use_missing = use_missing
 
         if entropy == "spectral":
             self.entropy = "spectral"
@@ -122,12 +124,16 @@ class UnsupervisedForest():
         chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
-        imputed = imputer.fit_transform(self.X)
+        if self.imputed is None:
+            imputed = imputer.fit_transform(self.X)
+        else:
+            imputed = self.imputed
 
-        return UnsupervisedTree(self.X, imputed, self.n_sampled_features, chosen_inputs,
-                                chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=2 ** (self.depth - 1), entropy=self.entropy, rng=rng, 
-                                imputer=imputer, decay=self.decay, forest=self, root_index=root_index)
+        return UnsupervisedTree(self.X, imputed, self.n_sampled_features, chosen_inputs, chosen_features,
+                                depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
+                                decay=self.decay, entropy=self.entropy, optimize=self.optimize,
+                                use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
+                                root_index=root_index)
     
     def apply(self, x):
         """
@@ -211,8 +217,8 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
-                 weight, entropy="one", rng=None, imputer=None, decay=0.5, root=None, parent=None, forest=None, 
-                 root_index=0):
+                 weight, decay=0.5, entropy="one", optimize="max", use_missing=False, rng=None, imputer=None, 
+                 root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -256,7 +262,8 @@ class UnsupervisedTree():
 
             self.missing_profile = forest.missing_profile
 
-            self.optimize = forest.optimize
+            self.optimize = optimize
+            self.use_missing = use_missing
             if entropy == "spectral":
                 self.H = H_spectral
             elif entropy == "one":
@@ -379,7 +386,7 @@ class UnsupervisedTree():
         X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
         n_total = X_sorted.shape[0]
         X_sorted = X_sorted[~np.isnan(X_sorted)] # This should be faster the other way around...
-        n_complete = n_total - X_sorted.shape[0]
+        n_complete = X_sorted.shape[0]
         n_missing = n_total - n_complete
         
         # Sort into bins for the array based on values

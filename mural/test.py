@@ -365,8 +365,9 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             if not os.path.isdir(f"{path}/{t}trees{d}depth"):
                 os.mkdir(f"{path}/{t}trees{d}depth")
 
-            forest = UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay,
-                                             missing_profile=missing_profile, weighted=weighted, optimize=optimize)
+            forest = UnsupervisedForest(data, t, sampled_features, batch_size, depth=d, 
+                                        min_leaf_size=min_leaf_size, decay=decay, imputed=None,
+                                        missing_profile=missing_profile, weighted=weighted, optimize=optimize)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
