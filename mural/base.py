@@ -8,6 +8,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 
 from _entropy import *
 from _affinity import *
@@ -98,28 +100,34 @@ class UnsupervisedForest():
         ss = np.random.SeedSequence(12345)
         child_seeds = ss.spawn(n_estimators)
         streams = [np.random.default_rng(s) for s in child_seeds]
+        states = ss.generate_state(n_estimators)
 
-        self.trees = Parallel(n_jobs=N_JOBS)(delayed(self.create_tree)(stream, i) for i, stream in enumerate(streams))
+        imputers = [IterativeImputer(sample_posterior=True, random_state=state) for state in states]
+        #imputed = Parallel(n_jobs=N_JOBS)(delayed(impute_parallel)(self.X, seed, i) for i, seed in enumerate(child_seeds))
+        self.trees = Parallel(n_jobs=N_JOBS)(delayed(self.create_tree)(stream, imputers[i], i) for i, stream in enumerate(streams))
         
         toc = time.perf_counter()
         self.time_used = toc - tic
         print(f"Completed the Unsupervised RF in {self.time_used:0.4f} seconds")
         
-    def create_tree(self, rng, root_index=0):
+    def create_tree(self, rng, imputer, root_index=0):
         """
         Create and fit a decision tree to be used by the forest.
 
         @rng a random number generator
+        @param imputer an imputer object
         @param index nothing, used to parallelize
         """
 
         chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
-        return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
+        imputed = imputer.fit_transform(self.X)
+
+        return UnsupervisedTree(self.X, imputed, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
                                 weight=2 ** (self.depth - 1), entropy=self.entropy, rng=rng, 
-                                decay=self.decay, forest=self, root_index=root_index)
+                                imputer=imputer, decay=self.decay, forest=self, root_index=root_index)
     
     def apply(self, x):
         """
@@ -202,8 +210,9 @@ class UnsupervisedTree():
     """
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
-    def __init__(self, X, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
-                 weight, entropy="one", rng=None, decay=0.5, root=None, parent=None, forest=None, root_index=0):
+    def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
+                 weight, entropy="one", rng=None, imputer=None, decay=0.5, root=None, parent=None, forest=None, 
+                 root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -230,6 +239,9 @@ class UnsupervisedTree():
             self.root = self
             self.rng = rng
             self.parent = None
+
+            self.imputed = imputed
+            self.imputer = imputer
             
             # Create the adjacency list
             self.Al = [[]]
@@ -345,13 +357,13 @@ class UnsupervisedTree():
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
-        self.missing = UnsupervisedTree(self.X, self.n_sampled_features, self.chosen_inputs[to_missing], m_branch_features, 
-                                        self.depth - 1, self.min_leaf_size, self.weight * self.decay,
-                                        self.decay, root=self.root, parent=self)
-        self.low = UnsupervisedTree(self.X, self.n_sampled_features, joint_low, l_branch_features, 
+        self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
+                                        m_branch_features, self.depth - 1, self.min_leaf_size,
+                                        self.weight * self.decay, self.decay, root=self.root, parent=self)
+        self.low = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_low, l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
                                     self.decay, root=self.root, parent=self)
-        self.high = UnsupervisedTree(self.X, self.n_sampled_features, joint_high, h_branch_features, 
+        self.high = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_high, h_branch_features, 
                                      self.depth - 1, self.min_leaf_size, self.weight / 2,
                                      self.decay, root=self.root, parent=self)
 
@@ -365,7 +377,10 @@ class UnsupervisedTree():
 
         # Make a sorted list of values in this variable and get rid of missingness
         X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
+        n_total = X_sorted.shape[0]
         X_sorted = X_sorted[~np.isnan(X_sorted)] # This should be faster the other way around...
+        n_complete = n_total - X_sorted.shape[0]
+        n_missing = n_total - n_complete
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
@@ -400,7 +415,7 @@ class UnsupervisedTree():
         else:
             start_j = self.min_leaf_size
 
-        for j in range(start_j, X_sorted.shape[0] - 1 - self.min_leaf_size):
+        for j in range(start_j, n_complete - 1 - self.min_leaf_size):
             if X_sorted[j] == X_sorted[j+1]:
                 # We do not want to calculate scores for impossible splits
                 # A split must put all instances of equal values on one side
@@ -413,7 +428,7 @@ class UnsupervisedTree():
             H_high = self.root.H(X_sorted[j:])
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
-            H_splits = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
+            H_splits = (j / n_complete) * H_low + (1 - j / n_complete) * H_high
 
             if self.root.optimize == "max":
                 score = H_full - H_splits
@@ -612,3 +627,10 @@ class UnsupervisedTree():
                     queue.append(j)
         
         return acc
+
+
+def impute_parallel(data, seed, idx=0):
+    """
+    Helper function for multiple imputation in parallel.
+    """
+    return IterativeImputer(sample_posterior=True, random_state=seed).fit_transform(data)
