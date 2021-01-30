@@ -395,13 +395,13 @@ class UnsupervisedTree():
         n_missing = (n_total - n_complete) * self.root.use_missing
         
         # Sort into bins for the array based on values
-        total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
+        #total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
         H_full = self.root.H(X_sorted, num_missing=n_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
             return
-
+        """
         bin_number = len(total_bins)
         #print(total_bins, bin_number)
         if bin_number > 2:
@@ -426,6 +426,8 @@ class UnsupervisedTree():
             start_j = max(np.where(X_sorted>=value_position)[0][0], self.min_leaf_size)
         else:
             start_j = self.min_leaf_size
+        """
+        start_j = self.min_leaf_size
 
         for j in range(start_j, n_complete - 1 - self.min_leaf_size):
             if X_sorted[j] == X_sorted[j+1]:
