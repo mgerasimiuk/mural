@@ -19,7 +19,7 @@ from _utils import *
 # Which is derived from the fast.ai course (using the Apache license)
 
 EPSILON = np.finfo(float).eps
-N_JOBS = multiprocessing.cpu_count()
+N_JOBS = min(multiprocessing.cpu_count(), 9)
 
 
 class UnsupervisedForest():
@@ -102,9 +102,10 @@ class UnsupervisedForest():
         ss = np.random.SeedSequence(12345)
         child_seeds = ss.spawn(n_estimators)
         streams = [np.random.default_rng(s) for s in child_seeds]
-        states = ss.generate_state(n_estimators)
+        #states = ss.generate_state(n_estimators)
 
-        imputers = [IterativeImputer(sample_posterior=True, random_state=state) for state in states]
+        #imputers = [IterativeImputer(sample_posterior=True, random_state=state) for state in states]
+        imputers = np.arange(n_estimators)
         #imputed = Parallel(n_jobs=N_JOBS)(delayed(impute_parallel)(self.X, seed, i) for i, seed in enumerate(child_seeds))
         self.trees = Parallel(n_jobs=N_JOBS)(delayed(self.create_tree)(stream, imputers[i], i) for i, stream in enumerate(streams))
         
@@ -125,7 +126,8 @@ class UnsupervisedForest():
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
         if self.imputed is None:
-            imputed = imputer.fit_transform(self.X)
+            #imputed = imputer.fit_transform(self.X)
+            imputed = None
         else:
             imputed = self.imputed
 

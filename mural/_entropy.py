@@ -4,7 +4,7 @@ from sklearn.neighbors import kneighbors_graph
 EPSILON = np.finfo(float).eps
 
 
-def H_one(col, num_missing=0, num_neighbors=0):
+def H_one(col, imputed=None, num_missing=0, num_neighbors=0):
     """
     Get the single-variable entropy of a set.
 
@@ -28,7 +28,7 @@ def H_one(col, num_missing=0, num_neighbors=0):
     return H
 
 
-def H_spectral(data, n_missing=0, num_neighbors=5):
+def H_spectral(data, imputed=None, num_missing=0, num_neighbors=5):
     """
     Get the spectral entropy of a set.
 
@@ -37,8 +37,13 @@ def H_spectral(data, n_missing=0, num_neighbors=5):
     @return the von Neumann entropy of the set
     """
 
-    A = get_nn_graph(data, num_neighbors)
-    return get_spectral_entropy(A)
+    if imputed is None:
+        raise (ValueError)
+
+    A = get_nn_graph(imputed, num_neighbors)
+    H = get_spectral_entropy(A)
+
+    return H
 
 
 def get_density_matrix(A):
