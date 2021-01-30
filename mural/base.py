@@ -78,6 +78,11 @@ class UnsupervisedForest():
         assert (optimize == "max" or optimize == "min")
         self.optimize = optimize
 
+        if entropy == "spectral":
+            self.entropy = "spectral"
+        else:
+            self.entropy = "one"
+
         if decay is None:
             self.decay = 0.5
         else:
@@ -88,9 +93,6 @@ class UnsupervisedForest():
         ss = np.random.SeedSequence(12345)
         child_seeds = ss.spawn(n_estimators)
         streams = [np.random.default_rng(s) for s in child_seeds]
-        
-        # This step creates the forest
-        #self.trees = [self.create_tree() for i in range(n_estimators)]
 
         self.n_jobs = multiprocessing.cpu_count()
         self.trees = Parallel(n_jobs=self.n_jobs)(delayed(self.create_tree)(stream, i) for i, stream in enumerate(streams))
@@ -112,7 +114,8 @@ class UnsupervisedForest():
 
         return UnsupervisedTree(self.X, self.n_sampled_features, chosen_inputs,
                                 chosen_features, depth=self.depth, min_leaf_size=self.min_leaf_size,
-                                weight=2 ** (self.depth - 1), rng=rng, decay=self.decay, forest=self, root_index=root_index)
+                                weight=2 ** (self.depth - 1), entropy=self.entropy, rng=rng, 
+                                decay=self.decay, forest=self, root_index=root_index)
     
     def apply(self, x):
         """
@@ -234,6 +237,11 @@ class UnsupervisedTree():
             
             self.weight = 2 ** (depth - 1)
 
+            if entropy == "spectral":
+                self.H = H_spectral
+            elif entropy == "one":
+                self.H = H_one
+
             UnsupervisedTree.index_counter = 1
             self.index = 0
         else:
@@ -353,9 +361,7 @@ class UnsupervisedTree():
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
-
-        dist_full = np.histogram(X_sorted, bins=total_bins, density=True)[0]   
-        H_full = -1 * np.sum(dist_full * np.log(dist_full + EPSILON))
+        H_full = self.root.H(X_sorted)
 
         if self.root.forest.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
@@ -393,18 +399,10 @@ class UnsupervisedTree():
                 continue
             
             x_j = X_sorted[j]
-
-            # Calculate the optimal numbers of bins for the histograms
-            bins_low = np.histogram_bin_edges(X_sorted[:j], bins="auto")
-            bins_high = np.histogram_bin_edges(X_sorted[j:], bins="auto")
-
-            # Estimate the distributions on each side of the split
-            dist_low = np.histogram(X_sorted[:j], bins=bins_low, density=True)[0]
-            dist_high = np.histogram(X_sorted[j:], bins=bins_high, density=True)[0]
             
-            # Calculate Shannon entropy of the resulting distributions
-            H_low = -1 * np.sum(dist_low * np.log(dist_low + EPSILON))
-            H_high = -1 * np.sum(dist_high * np.log(dist_high + EPSILON))
+            # Calculate entropies of resulting distributions
+            H_low = self.root.H(X_sorted[:j])
+            H_high = self.root.H(X_sorted[j:])
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
             H_splits = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
