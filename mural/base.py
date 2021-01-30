@@ -8,12 +8,17 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
-from sklearn.neighbors import kneighbors_graph
+
+from _entropy import *
+from _affinity import *
+from _utils import *
 
 # Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
 # Which is derived from the fast.ai course (using the Apache license)
 
 EPSILON = np.finfo(float).eps
+N_JOBS = multiprocessing.cpu_count()
+
 
 class UnsupervisedForest():
     """
@@ -94,8 +99,7 @@ class UnsupervisedForest():
         child_seeds = ss.spawn(n_estimators)
         streams = [np.random.default_rng(s) for s in child_seeds]
 
-        self.n_jobs = multiprocessing.cpu_count()
-        self.trees = Parallel(n_jobs=self.n_jobs)(delayed(self.create_tree)(stream, i) for i, stream in enumerate(streams))
+        self.trees = Parallel(n_jobs=N_JOBS)(delayed(self.create_tree)(stream, i) for i, stream in enumerate(streams))
         
         toc = time.perf_counter()
         self.time_used = toc - tic
@@ -124,7 +128,7 @@ class UnsupervisedForest():
         @param x the data to apply the tree to
         """
 
-        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.apply)(x) for tree in self.trees)
+        result = Parallel(n_jobs=N_JOBS)(delayed(tree.apply)(x) for tree in self.trees)
 
         return result
     
@@ -133,7 +137,7 @@ class UnsupervisedForest():
         Get adjacency lists from each tree in a fitted model.
         """
 
-        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.adjacency)(i) for i, tree in enumerate(self.trees))
+        result = Parallel(n_jobs=N_JOBS)(delayed(tree.adjacency)(i) for i, tree in enumerate(self.trees))
 
         return result
 
@@ -142,7 +146,7 @@ class UnsupervisedForest():
         Get lists of leaves for each tree in a fitted model.
         """
 
-        result = Parallel(n_jobs=self.n_jobs)(delayed(tree.leaves)(i) for i, tree in enumerate(self.trees))
+        result = Parallel(n_jobs=N_JOBS)(delayed(tree.leaves)(i) for i, tree in enumerate(self.trees))
 
         return result
 
@@ -170,7 +174,7 @@ class UnsupervisedForest():
         @param q another cohort
         @return an estimate of the Wasserstein distance between them, array of averaged importances
         """
-        W_list = np.array(Parallel(n_jobs=self.n_jobs)(delayed(tree.wasserstein)(p, q) for tree in self.trees))
+        W_list = np.array(Parallel(n_jobs=N_JOBS)(delayed(tree.wasserstein)(p, q) for tree in self.trees))
         W_vals = W_list[:, 0]
         W_imps = np.array(W_list[:, 1])
         return sum(W_vals) / len(self.trees), np.mean(W_imps, axis=0)
@@ -235,8 +239,12 @@ class UnsupervisedTree():
             # Will use this to access shared data
             self.forest = forest
             
+            self.weighted = forest.weighted
             self.weight = 2 ** (depth - 1)
 
+            self.missing_profile = forest.missing_profile
+
+            self.optimize = forest.optimize
             if entropy == "spectral":
                 self.H = H_spectral
             elif entropy == "one":
@@ -260,17 +268,17 @@ class UnsupervisedTree():
 
         if parent is not None:
             # Update the adjacency list
-            if not self.root.forest.weighted:
+            if not self.root.weighted:
                 weight = 1
             
             self.root.Al[self.index].append((parent.index, weight))
             self.root.Al[parent.index].append((self.index, weight))
 
         # Score is to be maximized by splits
-        if self.root.forest.optimize == "max":
+        if self.root.optimize == "max":
             self.score = np.NINF
         # Experimental alternative objective
-        elif self.root.forest.optimize == "min":
+        elif self.root.optimize == "min":
             self.score = np.inf
 
         # This step fits the tree
@@ -299,7 +307,7 @@ class UnsupervisedTree():
         where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
 
         # Split missing values between regular nodes and missing node based on missing_profile
-        profile = int(self.root.forest.missing_profile[self.split_feature] * len(where_missing))
+        profile = int(self.root.missing_profile[self.split_feature] * len(where_missing))
         permute = self.root.rng.permutation(where_missing)
         to_missing = permute[0:profile] # These go to the missing node
         to_rest = permute[profile:] # These go to 50/50 to the other two
@@ -363,7 +371,7 @@ class UnsupervisedTree():
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
         H_full = self.root.H(X_sorted)
 
-        if self.root.forest.optimize == "max" and H_full <= self.score:
+        if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
             return
 
@@ -407,13 +415,13 @@ class UnsupervisedTree():
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
             H_splits = (j / X_sorted.shape[0]) * H_low + (1 - j / X_sorted.shape[0]) * H_high
 
-            if self.root.forest.optimize == "max":
+            if self.root.optimize == "max":
                 score = H_full - H_splits
                 if score > self.score:
                     self.split_feature = index
                     self.score = score
                     self.threshold = x_j
-            elif self.root.forest.optimize == "min":
+            elif self.root.optimize == "min":
                 score = H_splits
                 if score < self.score:
                     self.split_feature = index
@@ -450,7 +458,7 @@ class UnsupervisedTree():
         
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-        prob = self.root.forest.missing_profile[self.split_feature]
+        prob = self.root.missing_profile[self.split_feature]
         rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
@@ -547,7 +555,7 @@ class UnsupervisedTree():
         
         is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-        prob = self.root.forest.missing_profile[self.split_feature]
+        prob = self.root.missing_profile[self.split_feature]
         rolled = self.root.rng.random() <= prob
 
         if is_missing and not rolled:
@@ -604,222 +612,3 @@ class UnsupervisedTree():
                     queue.append(j)
         
         return acc
-
-
-def H_one(col):
-    """
-    Get the single-variable entropy of a set.
-
-    @param col a column of data
-    @return the Shannon entropy of the set
-    """
-
-    # Calculate the optimal numbers of bins for the histograms
-    bins = np.histogram_bin_edges(col, bins="auto")
-
-    # Estimate the distributions on each side of the split
-    dist = np.histogram(col, bins=bins, density=True)[0]
-            
-    # Calculate Shannon entropy of the resulting distributions
-    return -1 * np.sum(dist * np.log(dist + EPSILON))
-
-
-def H_spectral(data, num_neighbors):
-    """
-    Get the spectral entropy of a set.
-
-    @param data a dataset
-    @param num_neighbors the number of neighbors
-    @return the von Neumann entropy of the set
-    """
-
-    A = get_nn_graph(data, num_neighbors)
-    return get_spectral_entropy(A)
-
-
-def get_density_matrix(A):
-    """
-    Take a graph adjacency matrix and return a density matrix
-    for the von Neumann entropy calculation.
-
-    @param A the adjacency matrix of a graph
-    @return a density matrix
-    """
-
-    degree = np.diag(np.sum(A, axis=1))
-    L = degree - A # Get the combinatorial graph Laplacian
-    rho = L / np.trace(L)
-
-    return rho
-
-
-def get_spectral_entropy(A):
-    """
-    Get the spectral entropy of a network from its adjacency matrix.
-
-    @param A an adjacency matrix
-    @return the spectral entropy of the network
-    """
-
-    rho = get_density_matrix(A)
-
-    w, v = np.linalg.eigh(rho)
-    H = - np.sum(w * np.log2(w + EPSILON))
-
-    return H
-
-
-def get_nn_graph(imputed_data, num_neighbors, weighted=False):
-    """
-    Get the k nearest neighbor graph of a dataset.
-
-    @param imputed_data a complete dataset
-    @param num_neighbors the number of nearest neighbors
-    @param weighted True or False
-    @return the adjacency matrix of the resulting network
-    """
-    
-    W = kneighbors_graph(imputed_data, num_neighbors).toarray()
-
-    if weighted:
-        return W
-    else:
-        return (W > 0).astype(int)
-
-        
-def binary_affinity(result_list):
-    """
-    Calculates the average binary affinity from a list of results of each tree.
-    
-    @param result_list a list of "classification" results for a given sample on each tree
-    @return the elementwise average of binary affinities across all the trees
-    """
-
-    n = result_list[0].shape[0] # We have this many observations
-    M_acc = np.zeros(shape=(n,n))
-
-    for idx in result_list:
-        I1 = np.tile(idx, [n,1])
-        I2 = np.tile(idx[:,None], [1,n])
-        # Force broadcasting to get a binary affinity matrix
-        # (Do observations i and j have the same leaf assignment?)
-        M_acc += np.equal(I1, I2).astype("int")
-
-    return M_acc / len(result_list)
-
-
-def adjacency_matrix_from_list(Al):
-    """
-    Makes an adjacency matrix from an adjacency list representing the same graph
-    @param Al an adjacency list (Python type)
-    @return an adjacency matrix (ndarray)
-    """
-
-    n = len(Al)
-    Am = np.zeros((n, n), dtype=int)
-
-    for i in range(n):
-        for v, w in Al[i]:
-            Am[i, v] = w
-
-    return Am
-
-
-def adjacency_to_distances(Al, Ll=None, geometric=False):
-    """
-    Takes adjacency list and returns a distance matrix on its decision tree.
-    Manually runs breadth-first search to avoid calling networkx methods
-    and getting a dictionary intermediate.
-    @param Al an adjacency list of a tree
-    @param Ll a list of leaves of a tree (optional)
-    @return a distance matrix on the tree
-    """
-
-    # The number of nodes in one decision tree
-    n = len(Al)
-
-    if Ll is None:
-        Ll = range(0, n)
-
-    dist = np.full((n, n), np.inf)
-    np.fill_diagonal(dist, 0)
-
-    # The steps below compute shortest paths by calling BFS from each node
-    for i in Ll:
-        # Initialize a queue and push the starting point onto it
-        q = deque()
-        q.append(i)
-
-        # Keep track of what nodes we visited in this search
-        visited = np.zeros(n)
-        # We should not come back to where we started
-        visited[i] = 1
-
-        # Keep searching until we run out of unseen nodes
-        while q:
-            # Look at the node we discovered earliest
-            curr = q.popleft()
-
-            # Check all neighbors
-            for j, w in Al[curr]:
-                # To see if they were not seen before
-                if not visited[j]:
-                    # Then mark the node as visited
-                    visited[j] = 1
-
-                    # j's distance from node i is w more than that from i to j's predecessor (curr)
-                    dist[i][j] = dist[i][curr] + w
-
-                    # Add j to the queue so that we can visit its neighbors later
-                    q.append(j)
-
-    # The distance matrix for this tree is now done
-
-    if geometric:
-        mask = np.nonzero(dist == 0) # Pairs of arguments in the same leaves
-        dist = 2 ** (dist - 1) # Reweight paths
-        dist[mask] = 0 # But keep zero distances
-
-    return dist
-
-
-def get_average_distance(D_list, result_list):
-    """
-    Compute the average distance between two observations across all decision trees in a forest.
-    @param D_list a list containing the distance matrices for each tree in the given forest
-    @param result_list already found list of results of each tree
-    @return the matrix of average distances for the observations in this batch
-    """
-
-    assert len(D_list) == len(result_list)
-
-    n = result_list[0].shape[0]
-    M_acc = np.zeros(shape=(n,n))
-
-    for D, idx in zip(D_list, result_list):
-        # Choose M(x_i, x_j) to be the distance from leaf(x_i) to leaf(x_j)
-        M_acc += D[idx][:,idx]
-
-    return M_acc / len(result_list)
-
-
-def load_pickle(path):
-    """
-    Loads an UnsupervisedForest object from pickle.
-    """
-
-    f = open(path, "rb")
-    result = pickle.load(f)
-    f.close()
-    return result
-
-
-def load_json(path):
-    """
-    Loads an UnsupervisedForest object from json file.
-    """
-
-    f = open(path, "r")
-    result = json.load(f)
-    f.close()
-    return result

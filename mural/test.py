@@ -1,5 +1,4 @@
 # Code for testing MURAL
-import base
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,6 +10,10 @@ from scipy.stats import special_ortho_group
 from sklearn.datasets import make_swiss_roll, make_moons
 import demap
 import os
+
+from base import *
+from _entropy import *
+from _affinity import *
 
 default_trees = [10, 100, 500]
 default_depths = [4, 6, 10]
@@ -235,7 +238,7 @@ def test_forest(forest, data, labels, path=None, geometric=False):
 
     # Run binary affinities
     forest_fitted = forest.apply(data)
-    b_forest = base.binary_affinity(forest_fitted)
+    b_forest = binary_affinity(forest_fitted)
 
     # Plot binary affinities with PHATE by passing in affinity matrix
     phate_b = phate.PHATE(knn_dist="precomputed_affinity")
@@ -250,8 +253,8 @@ def test_forest(forest, data, labels, path=None, geometric=False):
                           filename=f"{path}/{num_trees}trees{depth}depth/binary")
 
     # For exponential affinities
-    D_list = [base.adjacency_to_distances(A, L, geometric=geometric) for A, L in zip(forest.adjacency(), forest.leaves())]
-    avg_distance = base.get_average_distance(D_list, forest_fitted)
+    D_list = [adjacency_to_distances(A, L, geometric=geometric) for A, L in zip(forest.adjacency(), forest.leaves())]
+    avg_distance = get_average_distance(D_list, forest_fitted)
 
     # Plot exponential affinities with PHATE by passing in distance matrix
     phate_e = phate.PHATE(knn_dist="precomputed_distance")
@@ -362,7 +365,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             if not os.path.isdir(f"{path}/{t}trees{d}depth"):
                 os.mkdir(f"{path}/{t}trees{d}depth")
 
-            forest = base.UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay,
+            forest = UnsupervisedForest(data, t, sampled_features, batch_size, d, min_leaf_size, decay,
                                              missing_profile=missing_profile, weighted=weighted, optimize=optimize)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
