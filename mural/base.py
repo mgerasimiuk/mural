@@ -394,7 +394,7 @@ class UnsupervisedTree():
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
-        H_full = self.root.H(X_sorted, n_missing)
+        H_full = self.root.H(X_sorted, num_missing=n_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
@@ -434,11 +434,12 @@ class UnsupervisedTree():
             x_j = X_sorted[j]
             
             # Calculate entropies of resulting distributions
-            H_low = self.root.H(X_sorted[:j])
-            H_high = self.root.H(X_sorted[j:])
+            H_low = self.root.H(X_sorted[:j], num_missing=0)
+            H_high = self.root.H(X_sorted[j:], num_missing=0)
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
-            H_splits = (j / n_complete) * H_low + (1 - j / n_complete) * H_high
+            n_div = n_complete + n_missing
+            H_splits = (j / n_div) * H_low + (1 - j / n_div) * H_high
 
             if self.root.optimize == "max":
                 score = H_full - H_splits
