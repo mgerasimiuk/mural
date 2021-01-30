@@ -387,11 +387,14 @@ class UnsupervisedTree():
         n_total = X_sorted.shape[0]
         X_sorted = X_sorted[~np.isnan(X_sorted)] # This should be faster the other way around...
         n_complete = X_sorted.shape[0]
-        n_missing = n_total - n_complete
+        if n_complete < 2 * self.min_leaf_size:
+            return
+        
+        n_missing = (n_total - n_complete) * self.root.use_missing
         
         # Sort into bins for the array based on values
         total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
-        H_full = self.root.H(X_sorted)
+        H_full = self.root.H(X_sorted, n_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
@@ -401,8 +404,8 @@ class UnsupervisedTree():
         #print(total_bins, bin_number)
         if bin_number > 2:
         
-            lower_bound = np.min(X_sorted)
-            upper_bound = np.max(X_sorted)
+            lower_bound = np.min(X_sorted, 0)
+            upper_bound = np.max(X_sorted, 0)
             width = (upper_bound - lower_bound) / bin_number
     
             list_var = []
@@ -418,7 +421,7 @@ class UnsupervisedTree():
             # Assumption that before this point there is no meaningful signal
             array_position = np.where(array_prob_cumsum >= 0.25)[0][0]
             value_position = total_bins[array_position]
-            start_j = np.where(X_sorted>=value_position)[0][0]
+            start_j = max(np.where(X_sorted>=value_position)[0][0], self.min_leaf_size)
         else:
             start_j = self.min_leaf_size
 

@@ -4,7 +4,7 @@ from sklearn.neighbors import kneighbors_graph
 EPSILON = np.finfo(float).eps
 
 
-def H_one(col):
+def H_one(col, num_missing=0, num_neighbors=0):
     """
     Get the single-variable entropy of a set.
 
@@ -16,13 +16,19 @@ def H_one(col):
     bins = np.histogram_bin_edges(col, bins="auto")
 
     # Estimate the distributions on each side of the split
-    dist = np.histogram(col, bins=bins, density=True)[0]
+    dist = np.histogram(col, bins=bins, density=False)[0]
+    dist = dist / (len(col) + num_missing)
+    p_missing = num_missing / (len(col) + num_missing)
             
     # Calculate Shannon entropy of the resulting distributions
-    return -1 * np.sum(dist * np.log(dist + EPSILON))
+    H = -1 * np.sum(dist * np.log(dist + EPSILON))
+    if num_missing != 0:
+        H -= p_missing * np.log(p_missing + EPSILON)
+
+    return H
 
 
-def H_spectral(data, num_neighbors):
+def H_spectral(data, n_missing=0, num_neighbors=5):
     """
     Get the spectral entropy of a set.
 
