@@ -415,7 +415,8 @@ class UnsupervisedTree():
 
             index = np.block([index, var23])
 
-        H_full = self.root.H(self.X[self.chosen_inputs], order, var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=n_missing)
+        H_full = self.root.H(self.X[self.chosen_inputs], order, var=index, imputed=self.root.imputed[self.chosen_inputs],
+                             use_missing=self.root.use_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
@@ -432,11 +433,13 @@ class UnsupervisedTree():
             x_j = X_ordered[j]
             
             # Calculate entropies of resulting distributions
-            H_low = self.root.H(self.X[self.chosen_inputs], order[:j], var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=0)
-            H_high = self.root.H(self.X[self.chosen_inputs], order[j:], var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=0)
+            H_low = self.root.H(self.X[self.chosen_inputs], order[:j], var=index, imputed=self.root.imputed[self.chosen_inputs],
+                                use_missing=self.root.use_missing)
+            H_high = self.root.H(self.X[self.chosen_inputs], order[j:], var=index, imputed=self.root.imputed[self.chosen_inputs],
+                                use_missing=self.root.use_missing)
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
-            n_div = n_complete + n_missing
+            n_div = n_complete + n_missing * self.root.use_missing
             H_splits = (j / n_div) * H_low + (1 - j / n_div) * H_high
 
             if self.root.optimize == "max":

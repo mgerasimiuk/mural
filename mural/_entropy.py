@@ -5,7 +5,7 @@ from sklearn.utils.validation import column_or_1d
 EPSILON = np.finfo(float).eps
 
 
-def H_one(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
+def H_one(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     """
     Get the single-variable entropy of a set.
 
@@ -14,9 +14,11 @@ def H_one(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     """
 
     col = data[obs, var].reshape(-1)
-    num_total = len(col)
     mask = np.isnan(col)
     num_missing = np.count_nonzero(mask)
+
+    num_total = len(col) - num_missing * (not use_missing)
+
     col = col[~mask]
 
     # Calculate the optimal numbers of bins for the histograms
@@ -29,20 +31,19 @@ def H_one(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
             
     # Calculate Shannon entropy of the distribution
     H = -1 * np.sum(dist * np.log(dist + EPSILON))
-    if num_missing != 0:
+    if num_missing != 0 and use_missing:
         H -= p_missing * np.log(p_missing + EPSILON)
 
     return H
 
 
-def H_two(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
+def H_two(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     """
     Get 2d entropy.
     """
 
     col1 = data[obs, var[0]].reshape(-1)
     col2 = data[obs, var[1]].reshape(-1)
-    num_total = len(col1)
 
     mask1 = np.isnan(col1)
     mask2 = np.isnan(col2)
@@ -51,6 +52,9 @@ def H_two(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     num_missing1 = np.count_nonzero(mask1 and not mask2)
     num_missing2 = np.count_nonzero(mask2 and not mask1)
     num_missing12 = np.count_nonzero(mask1 and mask2)
+    num_missing = np.count_nonzero(mask1 or mask2)
+
+    num_total = len(col1) - num_missing * (not use_missing)
 
     col1 = col1[mask]
     col2 = col2[mask]
@@ -67,17 +71,18 @@ def H_two(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     p_missing12 = num_missing12 / num_total
 
     H = -1 * np.sum(dist * np.log(dist + EPSILON))
-    if num_missing1 != 0:
-        H -= p_missing1 * np.log(p_missing1 + EPSILON)
-    if num_missing2 != 0:
-        H -= p_missing2 * np.log(p_missing2 + EPSILON)
-    if num_missing12 != 0:
-        H -= p_missing12 * np.log(p_missing12 + EPSILON)
+    if use_missing:
+        if num_missing1 != 0:
+            H -= p_missing1 * np.log(p_missing1 + EPSILON)
+        if num_missing2 != 0:
+            H -= p_missing2 * np.log(p_missing2 + EPSILON)
+        if num_missing12 != 0:
+            H -= p_missing12 * np.log(p_missing12 + EPSILON)
 
     return H
 
 
-def H_three(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
+def H_three(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     """
     Get 3d entropy.
     """
@@ -85,7 +90,6 @@ def H_three(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     col1 = data[obs, var[0]].reshape(-1)
     col2 = data[obs, var[1]].reshape(-1)
     col3 = data[obs, var[2]].reshape(-1)
-    num_total = len(col1)
 
     mask1 = np.isnan(col1)
     mask2 = np.isnan(col2)
@@ -99,6 +103,9 @@ def H_three(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     num_missing13 = np.count_nonzero(mask1 and mask3 and not mask2)
     num_missing23 = np.count_nonzero(mask2 and mask3 and not mask1)
     num_missing123 = np.count_nonzero(mask1 and mask2 and mask3)
+    num_missing = np.count_nonzero(mask1 or mask2 or mask3)
+
+    num_total = len(col1) - num_missing * (not use_missing)
 
     col1 = col1[mask]
     col2 = col2[mask]
@@ -122,25 +129,26 @@ def H_three(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     p_missing123 = num_missing123 / num_total
 
     H = -1 * np.sum(dist * np.log(dist + EPSILON))
-    if num_missing1 != 0:
-        H -= p_missing1 * np.log(p_missing1 + EPSILON)
-    if num_missing2 != 0:
-        H -= p_missing2 * np.log(p_missing2 + EPSILON)
-    if num_missing3 != 0:
-        H -= p_missing3 * np.log(p_missing3 + EPSILON)
-    if num_missing12 != 0:
-        H -= p_missing12 * np.log(p_missing12 + EPSILON)
-    if num_missing13 != 0:
-        H -= p_missing13 * np.log(p_missing13 + EPSILON)
-    if num_missing23 != 0:
-        H -= p_missing23 * np.log(p_missing23 + EPSILON)
-    if num_missing123 != 0:
-        H -= p_missing123 * np.log(p_missing123 + EPSILON)
+    if use_missing:
+        if num_missing1 != 0:
+            H -= p_missing1 * np.log(p_missing1 + EPSILON)
+        if num_missing2 != 0:
+            H -= p_missing2 * np.log(p_missing2 + EPSILON)
+        if num_missing3 != 0:
+            H -= p_missing3 * np.log(p_missing3 + EPSILON)
+        if num_missing12 != 0:
+            H -= p_missing12 * np.log(p_missing12 + EPSILON)
+        if num_missing13 != 0:
+            H -= p_missing13 * np.log(p_missing13 + EPSILON)
+        if num_missing23 != 0:
+            H -= p_missing23 * np.log(p_missing23 + EPSILON)
+        if num_missing123 != 0:
+            H -= p_missing123 * np.log(p_missing123 + EPSILON)
 
     return H
 
 
-def H_many(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=0):
+def H_many(data, obs, var=None, imputed=None, use_missing=False, num_neighbors=0):
     """
     Sum entropies of many variables.
     """
@@ -154,7 +162,7 @@ def H_many(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=0):
     return H
 
 
-def H_spectral(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=5):
+def H_spectral(data, obs, var=None, imputed=None, use_missing=False, num_neighbors=5):
     """
     Get the spectral entropy of a set.
 
