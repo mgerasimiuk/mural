@@ -90,6 +90,8 @@ class UnsupervisedForest():
 
         if entropy == "spectral":
             self.entropy = "spectral"
+        elif entropy == "many":
+            self.entropy == "many"
         else:
             self.entropy = "one"
 
@@ -269,6 +271,8 @@ class UnsupervisedTree():
             self.use_missing = use_missing
             if entropy == "spectral":
                 self.H = H_spectral
+            elif entropy == "many":
+                self.H = H_many
             elif entropy == "one":
                 self.H = H_one
 
