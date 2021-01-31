@@ -8,6 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
+from sklearn import impute
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 
@@ -127,7 +128,7 @@ class UnsupervisedForest():
 
         if self.imputed is None:
             #imputed = imputer.fit_transform(self.X)
-            imputed = None
+            imputed = np.empty_like(self.X)
         else:
             imputed = self.imputed
 
@@ -382,21 +383,23 @@ class UnsupervisedTree():
         that leads to the biggest information gain when split on.
         """
 
-        # Should I add missing ones into the entropy??
-
         # Make a sorted list of values in this variable and get rid of missingness
-        X_sorted = np.sort(self.X[self.chosen_inputs, index]).reshape(-1)
-        n_total = X_sorted.shape[0]
-        X_sorted = X_sorted[~np.isnan(X_sorted)] # This should be faster the other way around...
-        n_complete = X_sorted.shape[0]
+        col = self.X[self.chosen_inputs, index].reshape(-1)
+        n_total = len(col)
+        order = np.argsort(col)
+        n_missing = np.count_nonzero(np.isnan(col))
+
+        if n_missing != 0:
+            order = order[0:(-1) * n_missing]
+        n_missing *= self.root.use_missing
+
+        n_complete = len(order)
         if n_complete < 2 * self.min_leaf_size:
             return
         
-        n_missing = (n_total - n_complete) * self.root.use_missing
-        
         # Sort into bins for the array based on values
         #total_bins = np.histogram_bin_edges(X_sorted, bins="auto")
-        H_full = self.root.H(X_sorted, num_missing=n_missing)
+        H_full = self.root.H(self.X[self.chosen_inputs], order, var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=n_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
             # Then we will not get a higher information gain with this variable
@@ -428,18 +431,19 @@ class UnsupervisedTree():
             start_j = self.min_leaf_size
         """
         start_j = self.min_leaf_size
+        X_ordered = col[order]
 
         for j in range(start_j, n_complete - 1 - self.min_leaf_size):
-            if X_sorted[j] == X_sorted[j+1]:
+            if X_ordered[j] == X_ordered[j+1]:
                 # We do not want to calculate scores for impossible splits
                 # A split must put all instances of equal values on one side
                 continue
             
-            x_j = X_sorted[j]
+            x_j = X_ordered[j]
             
             # Calculate entropies of resulting distributions
-            H_low = self.root.H(X_sorted[:j], num_missing=0)
-            H_high = self.root.H(X_sorted[j:], num_missing=0)
+            H_low = self.root.H(self.X[self.chosen_inputs], order[:j], var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=0)
+            H_high = self.root.H(self.X[self.chosen_inputs], order[j:], var=index, imputed=self.root.imputed[self.chosen_inputs], num_missing=0)
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)
             n_div = n_complete + n_missing

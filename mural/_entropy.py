@@ -1,10 +1,11 @@
 import numpy as np
 from sklearn.neighbors import kneighbors_graph
+from sklearn.utils.validation import column_or_1d
 
 EPSILON = np.finfo(float).eps
 
 
-def H_one(col, imputed=None, num_missing=0, num_neighbors=0):
+def H_one(data, obs, var, imputed=None, num_missing=0, num_neighbors=0):
     """
     Get the single-variable entropy of a set.
 
@@ -12,15 +13,17 @@ def H_one(col, imputed=None, num_missing=0, num_neighbors=0):
     @return the Shannon entropy of the set
     """
 
+    col = data[obs, var].reshape(-1)
+
     # Calculate the optimal numbers of bins for the histograms
     bins = np.histogram_bin_edges(col, bins="auto")
 
-    # Estimate the distributions on each side of the split
+    # Estimate the distribution
     dist = np.histogram(col, bins=bins, density=False)[0]
     dist = dist / (len(col) + num_missing)
     p_missing = num_missing / (len(col) + num_missing)
             
-    # Calculate Shannon entropy of the resulting distributions
+    # Calculate Shannon entropy of the distribution
     H = -1 * np.sum(dist * np.log(dist + EPSILON))
     if num_missing != 0:
         H -= p_missing * np.log(p_missing + EPSILON)
@@ -28,7 +31,24 @@ def H_one(col, imputed=None, num_missing=0, num_neighbors=0):
     return H
 
 
-def H_spectral(data, imputed=None, num_missing=0, num_neighbors=5):
+def H_many(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=0):
+    """
+    Sum entropies of many variables.
+    """
+
+    n_dims = data.shape[1]
+    H = 0
+
+    for d in range(n_dims):
+        col = data[obs, d].reshape(-1)
+        n_missing = np.count_nonzero(np.isnan(col))
+        d_obs = np.nonzero(~np.isnan(col))[0]
+        H += H_one(data, d_obs, d, num_missing=n_missing)
+
+    return H
+
+
+def H_spectral(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=5):
     """
     Get the spectral entropy of a set.
 
@@ -40,7 +60,7 @@ def H_spectral(data, imputed=None, num_missing=0, num_neighbors=5):
     if imputed is None:
         raise (ValueError)
 
-    A = get_nn_graph(imputed, num_neighbors)
+    A = get_nn_graph(imputed[obs], num_neighbors)
     H = get_spectral_entropy(A)
 
     return H
