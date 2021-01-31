@@ -43,7 +43,7 @@ def H_many(data, obs, var=None, imputed=None, num_missing=0, num_neighbors=0):
         col = data[obs, d].reshape(-1)
         n_missing = np.count_nonzero(np.isnan(col))
         d_obs = np.nonzero(~np.isnan(col))[0]
-        H += H_one(data, d_obs, d, num_missing=n_missing)
+        H += H_one(data[obs], d_obs, d, num_missing=n_missing)
 
     return H
 
