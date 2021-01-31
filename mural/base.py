@@ -91,7 +91,7 @@ class UnsupervisedForest():
         if entropy == "spectral":
             self.entropy = "spectral"
         elif entropy == "many":
-            self.entropy == "many"
+            self.entropy = "many"
         else:
             self.entropy = "one"
 
