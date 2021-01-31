@@ -174,6 +174,8 @@ def H_spectral(data, obs, var=None, imputed=None, use_missing=False, num_neighbo
     if imputed is None:
         raise (ValueError)
 
+    num_neighbors = min(num_neighbors, len(obs) - 1)
+
     A = get_nn_graph(imputed[obs], num_neighbors)
     H = get_spectral_entropy(A)
 

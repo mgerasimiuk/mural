@@ -338,7 +338,7 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
 def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2, 
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None,
                   missing_profile=1, weighted=True, geometric=False, optimize="max",
-                  use_missing=False, entropy="one"):
+                  use_missing=False, entropy="one", imputed=None):
     """
     Train MURAL forests and save them and their embeddings.
 
@@ -367,7 +367,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                 os.mkdir(f"{path}/{t}trees{d}depth")
 
             forest = UnsupervisedForest(data, t, sampled_features, batch_size, depth=d, 
-                                        min_leaf_size=min_leaf_size, decay=decay, imputed=None,
+                                        min_leaf_size=min_leaf_size, decay=decay, imputed=imputed,
                                         missing_profile=missing_profile, weighted=weighted, optimize=optimize,
                                         use_missing=use_missing, entropy=entropy)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
