@@ -129,15 +129,17 @@ class UnsupervisedForest():
         """
 
         if self.avoid is None:
-            prob=None
+            prob = None
         elif self.avoid == "soft":
             prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
             prob = prob / np.sum(prob)
-        elif self.avoid == "hard":
+        elif self.avoid == "hard" or self.avoid == "mix":
             prob = np.ones(shape=self.X.shape[1])
             mask = np.any(np.isnan(self.X), axis=0)
             prob[mask] = 0
             prob = prob / np.sum(prob)
+        else:
+            prob = None
 
         chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
@@ -237,7 +239,7 @@ class UnsupervisedTree():
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
                  weight, decay=0.5, entropy="one", optimize="max", use_missing=False, rng=None, imputer=None, 
-                 avoid=False, root=None, parent=None, forest=None, root_index=0):
+                 avoid=None, root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -289,6 +291,14 @@ class UnsupervisedTree():
                 self.H = H_many
             elif entropy == "one":
                 self.H = H_one
+
+            if avoid is None:
+                self.prob = None
+            elif avoid == "soft" or avoid == "mix":
+                self.prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
+                self.prob = self.prob / np.sum(self.prob)
+            else:
+                self.prob = None
 
             UnsupervisedTree.index_counter = 1
             self.index = 0
@@ -379,9 +389,9 @@ class UnsupervisedTree():
         self.root.Al.append([])
 
         # Randomly choose the features for each branch
-        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
-        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=self.root.prob, replace=False))
+        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=self.root.prob, replace=False))
+        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=self.root.prob, replace=False))
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
