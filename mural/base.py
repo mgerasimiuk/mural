@@ -8,6 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
+from numpy.core.fromnumeric import size
 from sklearn import impute
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
@@ -28,7 +29,8 @@ class UnsupervisedForest():
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
-                decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=False):
+                decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=False,
+                avoid=None):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -80,6 +82,7 @@ class UnsupervisedForest():
         self.n_estimators = n_estimators
         self.depth = depth
         self.min_leaf_size = min_leaf_size
+        self.avoid = avoid
 
         # Experiment with unweighted (all 1) edges
         self.weighted = weighted
@@ -125,7 +128,18 @@ class UnsupervisedForest():
         @param index nothing, used to parallelize
         """
 
-        chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, replace=False))
+        if self.avoid is None:
+            prob=None
+        elif self.avoid == "soft":
+            prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
+            prob = prob / np.sum(prob)
+        elif self.avoid == "hard":
+            prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            prob[mask] = 0
+            prob = prob / np.sum(prob)
+
+        chosen_features = np.sort(rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=False))
 
         if self.imputed is None:
@@ -138,7 +152,7 @@ class UnsupervisedForest():
                                 depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
                                 decay=self.decay, entropy=self.entropy, optimize=self.optimize,
                                 use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
-                                root_index=root_index)
+                                root_index=root_index, avoid=self.avoid)
     
     def apply(self, x):
         """
@@ -223,7 +237,7 @@ class UnsupervisedTree():
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
                  weight, decay=0.5, entropy="one", optimize="max", use_missing=False, rng=None, imputer=None, 
-                 root=None, parent=None, forest=None, root_index=0):
+                 avoid=False, root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
