@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 import multiprocessing
 from numpy.core.fromnumeric import size
+from numpy.lib.polynomial import roots
 from sklearn import impute
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
@@ -91,12 +92,7 @@ class UnsupervisedForest():
         self.optimize = optimize
         self.use_missing = use_missing
 
-        if entropy == "spectral":
-            self.entropy = "spectral"
-        elif entropy == "many":
-            self.entropy = "many"
-        else:
-            self.entropy = "one"
+        self.entropy = entropy
 
         if decay is None:
             self.decay = 0.5
@@ -287,9 +283,17 @@ class UnsupervisedTree():
             self.use_missing = use_missing
             if entropy == "spectral":
                 self.H = H_spectral
+            elif entropy == "two":
+                self.H = H_two
+            elif entropy == "two_even":
+                self.H = H_two_even
+            elif entropy == "three":
+                self.H = H_three
+            elif entropy == "three_even":
+                self.H = H_three_even
             elif entropy == "many":
                 self.H = H_many
-            elif entropy == "one":
+            else:
                 self.H = H_one
 
             if avoid is None:
@@ -434,20 +438,22 @@ class UnsupervisedTree():
         if n_complete < 2 * self.min_leaf_size:
             return
         
-        if self.root.H == H_two:
+        if self.root.H == H_two or self.root.H == H_two_even:
             vars = np.arange(self.X.shape[1])
             vars = np.delete(vars, index)
             var2 = self.root.rng.choice(vars)
 
-            index = np.block([index, var2])
-        elif self.root.H == H_three:
+            indices = np.block([index, var2])
+        elif self.root.H == H_three or self.root.H == H_three_even:
             vars = np.arange(self.X.shape[1])
             vars = np.delete(vars, index)
             var23 = self.root.rng.choice(vars, size=2, replace=False)
 
-            index = np.block([index, var23])
+            indices = np.block([index, var23])
+        else:
+            indices = index
 
-        H_full = self.root.H(self.X[self.chosen_inputs], order, var=index, imputed=self.root.imputed[self.chosen_inputs],
+        H_full = self.root.H(self.X[self.chosen_inputs], order, var=indices, imputed=self.root.imputed[self.chosen_inputs],
                              use_missing=self.root.use_missing)
 
         if self.root.optimize == "max" and H_full <= self.score:
@@ -465,9 +471,9 @@ class UnsupervisedTree():
             x_j = X_ordered[j]
             
             # Calculate entropies of resulting distributions
-            H_low = self.root.H(self.X[self.chosen_inputs], order[:j], var=index, imputed=self.root.imputed[self.chosen_inputs],
+            H_low = self.root.H(self.X[self.chosen_inputs], order[:j], var=indices, imputed=self.root.imputed[self.chosen_inputs],
                                 use_missing=self.root.use_missing)
-            H_high = self.root.H(self.X[self.chosen_inputs], order[j:], var=index, imputed=self.root.imputed[self.chosen_inputs],
+            H_high = self.root.H(self.X[self.chosen_inputs], order[j:], var=indices, imputed=self.root.imputed[self.chosen_inputs],
                                 use_missing=self.root.use_missing)
 
             # We want to maximize information gain I = H(input_distribution) - |n_low|/|n_tot| H(low) - |n_high|/|n_tot| H(high)

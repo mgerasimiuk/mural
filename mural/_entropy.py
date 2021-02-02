@@ -47,22 +47,68 @@ def H_two(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
 
     mask1 = np.isnan(col1)
     mask2 = np.isnan(col2)
-    mask = not (mask1 or mask2)
+    mask = ~(mask1 | mask2)
 
-    num_missing1 = np.count_nonzero(mask1 and not mask2)
-    num_missing2 = np.count_nonzero(mask2 and not mask1)
-    num_missing12 = np.count_nonzero(mask1 and mask2)
-    num_missing = np.count_nonzero(mask1 or mask2)
+    num_missing1 = np.count_nonzero(mask1 &  ~mask2)
+    num_missing2 = np.count_nonzero(mask2 &  ~mask1)
+    num_missing12 = np.count_nonzero(mask1 & mask2)
+    num_missing = np.count_nonzero(mask1 | mask2)
 
-    num_total = len(col1) - num_missing * (not use_missing)
+    num_total = len(col1) - num_missing * (~use_missing)
 
     col1 = col1[mask]
     col2 = col2[mask]
 
     bins1 = np.histogram_bin_edges(col1, bins="auto")
     bins2 = np.histogram_bin_edges(col2, bins="auto")
-    bins = np.stack([bins1, bins2])
+    bins = (bins1, bins2)
     #bins = min(len(bins1), len(bins2)) - 1
+
+    dist = np.histogram2d(col1, col2, bins, density=False)[0]
+    dist = dist / num_total
+    p_missing1 = num_missing1 / num_total
+    p_missing2 = num_missing2 / num_total
+    p_missing12 = num_missing12 / num_total
+
+    H = -1 * np.sum(dist * np.log(dist + EPSILON))
+    if use_missing:
+        if num_missing1 != 0:
+            H -= p_missing1 * np.log(p_missing1 + EPSILON)
+        if num_missing2 != 0:
+            H -= p_missing2 * np.log(p_missing2 + EPSILON)
+        if num_missing12 != 0:
+            H -= p_missing12 * np.log(p_missing12 + EPSILON)
+
+    return H
+
+
+def H_two_even(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
+    """
+    Get 2d entropy with even bins.
+    """
+
+    col1 = data[obs, var[0]].reshape(-1)
+    col2 = data[obs, var[1]].reshape(-1)
+
+    mask1 = np.isnan(col1)
+    mask2 = np.isnan(col2)
+    mask = ~(mask1 | mask2)
+
+    num_missing1 = np.count_nonzero(mask1 &  ~mask2)
+    num_missing2 = np.count_nonzero(mask2 &  ~mask1)
+    num_missing12 = np.count_nonzero(mask1 & mask2)
+    num_missing = np.count_nonzero(mask1 | mask2)
+
+    num_total = len(col1) - num_missing * (~use_missing)
+
+    col1 = col1[mask]
+    col2 = col2[mask]
+
+    #bins1 = np.histogram_bin_edges(col1, bins="auto")
+    #bins2 = np.histogram_bin_edges(col2, bins="auto")
+    #bins = np.stack([bins1, bins2])
+    #bins = min(len(bins1), len(bins2)) - 1
+    bins = 10
 
     dist = np.histogram2d(col1, col2, bins, density=False)[0]
     dist = dist / num_total
@@ -94,18 +140,18 @@ def H_three(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     mask1 = np.isnan(col1)
     mask2 = np.isnan(col2)
     mask3 = np.isnan(col3)
-    mask = not (mask1 or mask2 or mask3)
+    mask = ~(mask1 | mask2 | mask3)
 
-    num_missing1 = np.count_nonzero(mask1 and (not mask2) and (not mask3))
-    num_missing2 = np.count_nonzero(mask2 and (not mask1) and (not mask3))
-    num_missing3 = np.count_nonzero(mask3 and (not mask1) and (not mask2))
-    num_missing12 = np.count_nonzero(mask1 and mask2 and not mask3)
-    num_missing13 = np.count_nonzero(mask1 and mask3 and not mask2)
-    num_missing23 = np.count_nonzero(mask2 and mask3 and not mask1)
-    num_missing123 = np.count_nonzero(mask1 and mask2 and mask3)
-    num_missing = np.count_nonzero(mask1 or mask2 or mask3)
+    num_missing1 = np.count_nonzero(mask1 & (~mask2) & (~mask3))
+    num_missing2 = np.count_nonzero(mask2 & (~mask1) & (~mask3))
+    num_missing3 = np.count_nonzero(mask3 & (~mask1) & (~mask2))
+    num_missing12 = np.count_nonzero(mask1 & mask2 & ~mask3)
+    num_missing13 = np.count_nonzero(mask1 & mask3 & ~mask2)
+    num_missing23 = np.count_nonzero(mask2 & mask3 & ~mask1)
+    num_missing123 = np.count_nonzero(mask1 & mask2 & mask3)
+    num_missing = np.count_nonzero(mask1 | mask2 | mask3)
 
-    num_total = len(col1) - num_missing * (not use_missing)
+    num_total = len(col1) - num_missing * (~use_missing)
 
     col1 = col1[mask]
     col2 = col2[mask]
@@ -114,8 +160,75 @@ def H_three(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     bins1 = np.histogram_bin_edges(col1, bins="auto")
     bins2 = np.histogram_bin_edges(col2, bins="auto")
     bins3 = np.histogram_bin_edges(col3, bins="auto")
-    bins = np.stack([bins1, bins2, bins3])
+    bins = (bins1, bins2, bins3)
     #bins = min(len(bins1), len(bins2), len(bins3)) - 1
+
+    dist = np.histogramdd((col1, col2, col3), bins, density=False)[0]
+    dist = dist / num_total
+
+    p_missing1 = num_missing1 / num_total
+    p_missing2 = num_missing2 / num_total
+    p_missing3 = num_missing3 / num_total
+    p_missing12 = num_missing12 / num_total
+    p_missing13 = num_missing13 / num_total
+    p_missing23 = num_missing23 / num_total
+    p_missing123 = num_missing123 / num_total
+
+    H = -1 * np.sum(dist * np.log(dist + EPSILON))
+    if use_missing:
+        if num_missing1 != 0:
+            H -= p_missing1 * np.log(p_missing1 + EPSILON)
+        if num_missing2 != 0:
+            H -= p_missing2 * np.log(p_missing2 + EPSILON)
+        if num_missing3 != 0:
+            H -= p_missing3 * np.log(p_missing3 + EPSILON)
+        if num_missing12 != 0:
+            H -= p_missing12 * np.log(p_missing12 + EPSILON)
+        if num_missing13 != 0:
+            H -= p_missing13 * np.log(p_missing13 + EPSILON)
+        if num_missing23 != 0:
+            H -= p_missing23 * np.log(p_missing23 + EPSILON)
+        if num_missing123 != 0:
+            H -= p_missing123 * np.log(p_missing123 + EPSILON)
+
+    return H
+
+
+def H_three_even(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
+    """
+    Get 3d entropy with evenly spaced bins.
+    """
+
+    col1 = data[obs, var[0]].reshape(-1)
+    col2 = data[obs, var[1]].reshape(-1)
+    col3 = data[obs, var[2]].reshape(-1)
+
+    mask1 = np.isnan(col1)
+    mask2 = np.isnan(col2)
+    mask3 = np.isnan(col3)
+    mask = ~(mask1 | mask2 | mask3)
+
+    num_missing1 = np.count_nonzero(mask1 & (~mask2) & (~mask3))
+    num_missing2 = np.count_nonzero(mask2 & (~mask1) & (~mask3))
+    num_missing3 = np.count_nonzero(mask3 & (~mask1) & (~mask2))
+    num_missing12 = np.count_nonzero(mask1 & mask2 & ~mask3)
+    num_missing13 = np.count_nonzero(mask1 & mask3 & ~mask2)
+    num_missing23 = np.count_nonzero(mask2 & mask3 & ~mask1)
+    num_missing123 = np.count_nonzero(mask1 & mask2 & mask3)
+    num_missing = np.count_nonzero(mask1 | mask2 | mask3)
+
+    num_total = len(col1) - num_missing * (~use_missing)
+
+    col1 = col1[mask]
+    col2 = col2[mask]
+    col3 = col3[mask]
+
+    #bins1 = np.histogram_bin_edges(col1, bins="auto")
+    #bins2 = np.histogram_bin_edges(col2, bins="auto")
+    #bins3 = np.histogram_bin_edges(col3, bins="auto")
+    #bins = np.stack([bins1, bins2, bins3])
+    #bins = min(len(bins1), len(bins2), len(bins3)) - 1
+    bins = 5
 
     dist = np.histogramdd((col1, col2, col3), bins, density=False)[0]
     dist = dist / num_total
