@@ -135,12 +135,12 @@ class UnsupervisedForest():
                 prob = prob / p_sum
         elif self.avoid == "hard" or self.avoid == "hard2" or self.avoid == "mix" or self.avoid == "mix2":
             prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            prob[mask] = 0
             p_sum = np.sum(prob)
             if p_sum == 0:
                 prob = None
             else:
-                mask = np.any(np.isnan(self.X), axis=0)
-                prob[mask] = 0
                 prob = prob / p_sum
         else:
             prob = None
@@ -408,12 +408,12 @@ class UnsupervisedTree():
         prob = self.root.prob
         if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
             prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            prob[mask] = 0
             p_sum = np.sum(prob)
             if p_sum == 0:
                 prob = None
             else:
-                mask = np.any(np.isnan(self.X), axis=0)
-                prob[mask] = 0
                 prob = prob / p_sum
 
         # Randomly choose the features for each branch
