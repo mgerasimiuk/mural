@@ -128,12 +128,20 @@ class UnsupervisedForest():
             prob = None
         elif self.avoid == "soft":
             prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
-            prob = prob / np.sum(prob)
+            p_sum = np.sum(prob)
+            if p_sum == 0:
+                prob = None
+            else:
+                prob = prob / p_sum
         elif self.avoid == "hard" or self.avoid == "hard2" or self.avoid == "mix" or self.avoid == "mix2":
             prob = np.ones(shape=self.X.shape[1])
-            mask = np.any(np.isnan(self.X), axis=0)
-            prob[mask] = 0
-            prob = prob / np.sum(prob)
+            p_sum = np.sum(prob)
+            if p_sum == 0:
+                prob = None
+            else:
+                mask = np.any(np.isnan(self.X), axis=0)
+                prob[mask] = 0
+                prob = prob / p_sum
         else:
             prob = None
 
@@ -300,7 +308,11 @@ class UnsupervisedTree():
                 self.prob = None
             elif avoid == "soft" or avoid == "mix":
                 self.prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
-                self.prob = self.prob / np.sum(self.prob)
+                p_sum = np.sum(self.prob)
+                if p_sum == 0:
+                    self.prob = None
+                else:
+                    self.prob = self.prob / p_sum
             else:
                 self.prob = None
             self.avoid = avoid
@@ -396,9 +408,13 @@ class UnsupervisedTree():
         prob = self.root.prob
         if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
             prob = np.ones(shape=self.X.shape[1])
-            mask = np.any(np.isnan(self.X), axis=0)
-            prob[mask] = 0
-            prob = prob / np.sum(prob)
+            p_sum = np.sum(prob)
+            if p_sum == 0:
+                prob = None
+            else:
+                mask = np.any(np.isnan(self.X), axis=0)
+                prob[mask] = 0
+                prob = prob / p_sum
 
         # Randomly choose the features for each branch
         m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
