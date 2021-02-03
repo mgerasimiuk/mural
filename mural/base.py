@@ -420,8 +420,20 @@ class UnsupervisedTree():
             else:
                 prob = prob / p_sum
 
+        if self.root.quad:
+            m_prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            m_prob[mask] = 0
+            p_sum = np.sum(m_prob)
+            if p_sum == 0:
+                m_prob = None
+            else:
+                m_prob = m_prob / p_sum
+        else:
+            m_prob = prob
+
         # Randomly choose the features for each branch
-        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
+        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=m_prob, replace=False))
         l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
         h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
 
