@@ -270,7 +270,7 @@ def H_many(data, obs, var=None, imputed=None, use_missing=False, num_neighbors=0
     H = 0
 
     for d in range(n_dims):
-        H += H_one(data, obs, d)
+        H += H_one(data, obs, d, imputed, use_missing, num_neighbors)
 
     return H
 
