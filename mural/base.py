@@ -159,7 +159,7 @@ class UnsupervisedForest():
                                 depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
                                 decay=self.decay, entropy=self.entropy, optimize=self.optimize,
                                 use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
-                                root_index=root_index, avoid=self.avoid)
+                                root_index=root_index, avoid=self.avoid, quad=self.quad)
     
     def apply(self, x):
         """
@@ -244,7 +244,7 @@ class UnsupervisedTree():
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
                  weight, decay=0.5, entropy="one", optimize="max", use_missing=False, rng=None, imputer=None, 
-                 avoid=None, root=None, parent=None, forest=None, root_index=0):
+                 avoid=None, quad=False, override=None, root=None, parent=None, forest=None, root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -317,6 +317,7 @@ class UnsupervisedTree():
             else:
                 self.prob = None
             self.avoid = avoid
+            self.quad = quad
 
             UnsupervisedTree.index_counter = 1
             self.index = 0
@@ -338,6 +339,8 @@ class UnsupervisedTree():
             # Update the adjacency list
             if not self.root.weighted:
                 weight = 1
+            if override is not None:
+                weight = override
             
             self.root.Al[self.index].append((parent.index, weight))
             self.root.Al[parent.index].append((self.index, weight))
@@ -424,9 +427,14 @@ class UnsupervisedTree():
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
-        self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
-                                        m_branch_features, self.depth - 1, self.min_leaf_size,
-                                        self.weight * self.decay, self.decay, root=self.root, parent=self)
+        if self.root.quad:
+            self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
+                                            m_branch_features, self.depth, self.min_leaf_size,
+                                            self.weight, self.decay, root=self.root, parent=self, override=0)
+        else:
+            self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
+                                            m_branch_features, self.depth - 1, self.min_leaf_size,
+                                            self.weight * self.decay, self.decay, root=self.root, parent=self)
         self.low = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_low, l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
                                     self.decay, root=self.root, parent=self)
