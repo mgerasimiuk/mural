@@ -31,7 +31,7 @@ class UnsupervisedForest():
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
                 decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=False,
-                avoid=None):
+                avoid=None, quad=False):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -84,6 +84,7 @@ class UnsupervisedForest():
         self.depth = depth
         self.min_leaf_size = min_leaf_size
         self.avoid = avoid
+        self.quad = quad
 
         # Experiment with unweighted (all 1) edges
         self.weighted = weighted

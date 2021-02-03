@@ -18,6 +18,8 @@ def H_one(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
     num_missing = np.count_nonzero(mask)
 
     num_total = len(col) - num_missing * (not use_missing)
+    if num_total == 0:
+        return 0
 
     col = col[~mask]
 
