@@ -1,4 +1,8 @@
-# MURAL code
+# MURAL
+# Written by Michal Gerasimiuk for a project undertaken with Dennis Shung
+# Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
+# Which is derived from the fast.ai course (using the Apache license)
+# Documented using javadoc because I don't know anything else ¯\_(ツ)_/¯
 import time
 import numpy as np
 from collections import deque
@@ -18,9 +22,6 @@ from _entropy import *
 from _affinity import *
 from _utils import *
 
-# Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
-# Which is derived from the fast.ai course (using the Apache license)
-
 EPSILON = np.finfo(float).eps
 N_JOBS = min(multiprocessing.cpu_count(), 9)
 
@@ -30,8 +31,8 @@ class UnsupervisedForest():
     Realization of the random forest classifier for the unsupervised setting with samples involving missingness.
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
-                decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=False,
-                avoid=None, quad=False):
+                decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=True,
+                avoid=None, layers=1, quad=False):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -84,6 +85,7 @@ class UnsupervisedForest():
         self.depth = depth
         self.min_leaf_size = min_leaf_size
         self.avoid = avoid
+        self.layers = layers
         self.quad = quad
 
         # Experiment with unweighted (all 1) edges
@@ -151,7 +153,7 @@ class UnsupervisedForest():
 
         if self.imputed is None:
             #imputed = imputer.fit_transform(self.X)
-            imputed = np.empty_like(self.X)
+            imputed = self.X # This is to be removed later
         else:
             imputed = self.imputed
 
@@ -159,7 +161,7 @@ class UnsupervisedForest():
                                 depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
                                 decay=self.decay, entropy=self.entropy, optimize=self.optimize,
                                 use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
-                                root_index=root_index, avoid=self.avoid, quad=self.quad)
+                                root_index=root_index, avoid=self.avoid, layers=self.layers, quad=self.quad)
     
     def apply(self, x):
         """
@@ -243,8 +245,9 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
-                 weight, decay=0.5, entropy="one", optimize="max", use_missing=False, rng=None, imputer=None, 
-                 avoid=None, quad=False, override=None, root=None, parent=None, forest=None, root_index=0):
+                 weight, decay=0.5, entropy="one", optimize="max", use_missing=True, avoid=None, layers=1,
+                 quad=False, override=None, rng=None, imputer=None, root=None, parent=None, forest=None, 
+                 root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -307,7 +310,7 @@ class UnsupervisedTree():
 
             if avoid is None:
                 self.prob = None
-            elif avoid == "soft" or avoid == "mix":
+            elif avoid == "soft" or avoid == "mix" or avoid == "mix2":
                 self.prob = np.count_nonzero(~np.isnan(self.X), axis=0) # Probability that each variable is not missing
                 p_sum = np.sum(self.prob)
                 if p_sum == 0:
@@ -316,7 +319,9 @@ class UnsupervisedTree():
                     self.prob = self.prob / p_sum
             else:
                 self.prob = None
+
             self.avoid = avoid
+            self.layers = layers
             self.quad = quad
 
             UnsupervisedTree.index_counter = 1
@@ -410,7 +415,8 @@ class UnsupervisedTree():
         self.root.Al.append([])
 
         prob = self.root.prob
-        if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
+        if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
+        #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
             prob = np.ones(shape=self.X.shape[1])
             mask = np.any(np.isnan(self.X), axis=0)
             prob[mask] = 0
@@ -420,7 +426,7 @@ class UnsupervisedTree():
             else:
                 prob = prob / p_sum
 
-        if self.root.quad:
+        if self.root.quad: # Force a different probability distribution for the replacement split in the missing case
             m_prob = np.ones(shape=self.X.shape[1])
             mask = np.any(np.isnan(self.X), axis=0)
             m_prob[mask] = 0
@@ -439,7 +445,7 @@ class UnsupervisedTree():
 
         # Create three subtrees for the data to go to
         # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
-        if self.root.quad:
+        if self.root.quad: # This simulates a four-way split
             self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
                                             m_branch_features, self.depth, self.min_leaf_size,
                                             self.weight, self.decay, root=self.root, parent=self, override=0)
@@ -447,6 +453,7 @@ class UnsupervisedTree():
             self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
                                             m_branch_features, self.depth - 1, self.min_leaf_size,
                                             self.weight * self.decay, self.decay, root=self.root, parent=self)
+
         self.low = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_low, l_branch_features, 
                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
                                     self.decay, root=self.root, parent=self)
@@ -465,11 +472,6 @@ class UnsupervisedTree():
         n_total = len(col)
         order = np.argsort(col)
         n_missing = np.count_nonzero(np.isnan(col))
-
-        if n_missing != 0:
-            order_complete = order[0:(-1) * n_missing]
-        else:
-            order_complete = order
 
         n_complete = n_total - n_missing
         if n_complete < 2 * self.min_leaf_size:
