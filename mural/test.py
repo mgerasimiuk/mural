@@ -253,19 +253,34 @@ def test_forest(forest, data, labels, path=None, geometric=False):
                           filename=f"{path}/{num_trees}trees{depth}depth/binary")
 
     # For exponential affinities
-    D_list = [adjacency_to_distances(A, L, geometric=geometric) for A, L in zip(forest.adjacency(), forest.leaves())]
-    avg_distance = get_average_distance(D_list, forest_fitted)
+    weighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=True) for A, L in zip(forest.adjacency(), forest.leaves())]
+    weighted_avg_distance = get_average_distance(weighted_D_list, forest_fitted)
 
     # Plot exponential affinities with PHATE by passing in distance matrix
-    phate_e = phate.PHATE(knn_dist="precomputed_distance")
-    phate_fit_e = phate_e.fit_transform(avg_distance)
-    np.save(f"{path}/{num_trees}trees{depth}depth/exponential_mural", phate_fit_e)
-    scprep.plot.scatter2d(phate_fit_e, c = labels, 
+    phate_w_e = phate.PHATE(knn_dist="precomputed_distance")
+    phate_fit_w_e = phate_w_e.fit_transform(weighted_avg_distance)
+    np.save(f"{path}/{num_trees}trees{depth}depth/exponential_weighted_mural", phate_fit_w_e)
+    scprep.plot.scatter2d(phate_fit_w_e, c = labels, 
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
                           figsize=(7,5),
-                          filename=f"{path}/{num_trees}trees{depth}depth/exponential")
+                          filename=f"{path}/{num_trees}trees{depth}depth/exponential_weighted")
+
+    # Try unweighted edges
+    unweighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=False) for A, L in zip(forest.adjacency(), forest.leaves())]
+    unweighted_avg_distance = get_average_distance(unweighted_D_list, forest_fitted)
+
+    # Plot exponential affinities with PHATE
+    phate_uw_e = phate.PHATE(knn_dist="precomputed_distance")
+    phate_fit_uw_e = phate_uw_e.fit_transform(unweighted_avg_distance)
+    np.save(f"{path}/{num_trees}trees{depth}depth/exponential_unweighted_mural", phate_fit_uw_e)
+    scprep.plot.scatter2d(phate_fit_uw_e, c = labels, 
+                          legend_anchor=(1,1),
+                          label_prefix='PHATE', ticks=None,
+                          title='PHATE',
+                          figsize=(7,5),
+                          filename=f"{path}/{num_trees}trees{depth}depth/exponential_unweighted")
 
     
 def demap_reference(data, path=None):
@@ -321,14 +336,17 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
 
     for t in trees:
         for d in depths:
-            exponential_mural = np.load(f"{path}/{t}trees{d}depth/exponential_mural.npy")
+            exponential_weighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_weighted_mural.npy")
+            exponential_unweighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_unweighted_mural.npy")
             binary_mural = np.load(f"{path}/{t}trees{d}depth/binary_mural.npy")
 
-            demap_mural_e = demap.DEMaP(data, exponential_mural)
+            demap_mural_w_e = demap.DEMaP(data, exponential_weighted_mural)
+            demap_mural_uw_e = demap.DEMaP(data, exponential_unweighted_mural)
             demap_mural_b = demap.DEMaP(data, binary_mural)
 
             f.write(f"For {t} trees, {d} depth:\n")
-            f.write(f"DEMaP for MURAL (e) is {demap_mural_e}\n")
+            f.write(f"DEMaP for MURAL (w, e) is {demap_mural_w_e}\n")
+            f.write(f"DEMaP for MURAL (uw, e) is {demap_mural_uw_e}\n")
             f.write(f"DEMaP for MURAL (b) is {demap_mural_b}\n")
             f.write("\n")
 
