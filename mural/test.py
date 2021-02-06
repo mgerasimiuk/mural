@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scprep
 import phate
+from sklearn.neighbors import kneighbors_graph
 from sklearn.manifold import TSNE
 from sklearn import preprocessing
 from scipy.stats import special_ortho_group
@@ -162,12 +163,13 @@ def make_missing_random(data, n_missing, idxs=None):
     return new_missing, new_imputed
 
 
-def make_embeddings(data, labels, path=None):
+def make_embeddings(data, labels, labels_binary=False, path=None):
     """
     Make PCA, tSNE, and PHATE embeddings of the dataset and save them.
 
     @param data the data to apply it to
     @param labels the labels used for coloring
+    @param labels_binary default false, but if True will change color to blue/orange
     @param path the path to save embeddings and plots in, CWD by default
     """
     
@@ -184,17 +186,35 @@ def make_embeddings(data, labels, path=None):
 
     # PCA reduction 
     data_pca = scprep.reduce.pca(data, dims)
-    scprep.plot.scatter2d(data_pca[:, 0:2], c = labels,
+    if labels_binary==True:
+        scprep.plot.scatter2d(data_pca[:, 0:2], c = labels, cmap=['blue', 'orange'],
                           legend_anchor=(1,1),
                           label_prefix='PCA', ticks=None,
                           title='PCA',
                           figsize=(7,5),
                           filename=f"{path}/non_mural/pca.png")
+
+    elif labels_binary==False:
+        scprep.plot.scatter2d(data_pca[:, 0:2], c = labels,
+                          legend_anchor=(1,1),
+                          label_prefix='PCA', ticks=None,
+                          title='PCA',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/pca.png")
+        
     np.save(f"{path}/non_mural/pca.npy", data_pca[:, 0:2])
 
     # tSNE
     data_tsne = TSNE(n_components=2).fit_transform(data)
-    scprep.plot.scatter2d(data_tsne, c = labels,
+    if labels_binary==True:
+        scprep.plot.scatter2d(data_tsne, c = labels, cmap=['blue', 'orange'],
+                          legend_anchor=(1,1),
+                          label_prefix='tSNE', ticks=None,
+                          title='tSNE',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/tsne.png")
+    elif labels_binary==False:
+        scprep.plot.scatter2d(data_tsne, c = labels,
                           legend_anchor=(1,1),
                           label_prefix='tSNE', ticks=None,
                           title='tSNE',
@@ -205,7 +225,15 @@ def make_embeddings(data, labels, path=None):
     # PHATE
     phate_op = phate.PHATE()
     phate_orig = phate_op.fit_transform(data)
-    scprep.plot.scatter2d(phate_orig, c = labels,
+    if labels_binary==True:
+        scprep.plot.scatter2d(phate_orig, c = labels,cmap=['blue', 'orange'],
+                          legend_anchor=(1,1),
+                          label_prefix='PHATE', ticks=None,
+                          title='PHATE',
+                          figsize=(7,5),
+                          filename=f"{path}/non_mural/phate.png")
+    elif labels_binary==False:
+        scprep.plot.scatter2d(phate_orig, c = labels,
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
@@ -214,13 +242,14 @@ def make_embeddings(data, labels, path=None):
     np.save(f"{path}/non_mural/phate.npy", phate_orig)
 
 
-def test_forest(forest, data, labels, path=None, geometric=False):
+def test_forest(forest, data, labels, labels_binary=False, path=None, geometric=False):
     """
     Perform tests for a MURAL forest and saves embeddings and plots.
 
     @param forest a fitted UnsupervisedForest to test
     @param data the data to apply it to
     @param labels the labels used for coloring
+    @param labels_binary default false, but if True will change color to blue/orange
     @param path the path to save embeddings and plots in, CWD by default
     """
 
@@ -245,7 +274,15 @@ def test_forest(forest, data, labels, path=None, geometric=False):
     phate_fit_b = phate_b.fit_transform(b_forest)
     np.save(f"{path}/{num_trees}trees{depth}depth/binary_mural", phate_fit_b)
 
-    scprep.plot.scatter2d(phate_fit_b, c = labels, 
+    if labels_binary==True:
+        scprep.plot.scatter2d(phate_fit_b, c = labels, cmap = ['blue','orange'], 
+                          legend_anchor=(1,1),
+                          label_prefix='PHATE', ticks=None,
+                          title='PHATE',
+                          figsize=(7,5),
+                          filename=f"{path}/{num_trees}trees{depth}depth/binary")
+    elif labels_binary==False:
+        scprep.plot.scatter2d(phate_fit_b, c = labels, 
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
@@ -260,13 +297,21 @@ def test_forest(forest, data, labels, path=None, geometric=False):
     phate_e = phate.PHATE(knn_dist="precomputed_distance")
     phate_fit_e = phate_e.fit_transform(avg_distance)
     np.save(f"{path}/{num_trees}trees{depth}depth/exponential_mural", phate_fit_e)
-    scprep.plot.scatter2d(phate_fit_e, c = labels, 
+    if labels_binary==True:
+        scprep.plot.scatter2d(phate_fit_e, c = labels, cmap=['blue', 'orange'],
+        legend_anchor=(1,1),
+        label_prefix='PHATE', ticks=None,
+        title='PHATE',
+        figsize=(7,5),
+        filename=f"{path}/{num_trees}trees{depth}depth/exponential")
+
+    elif labels_binary==False:
+        scprep.plot.scatter2d(phate_fit_e, c = labels, 
                           legend_anchor=(1,1),
                           label_prefix='PHATE', ticks=None,
                           title='PHATE',
                           figsize=(7,5),
                           filename=f"{path}/{num_trees}trees{depth}depth/exponential")
-
     
 def demap_reference(data, path=None):
     """
@@ -334,17 +379,116 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
 
     f.close()
 
+def accuracy(A, A_true, n_neighbors, n_distributions):
+    """
+    Determine accuracy of kNN graph generated by embedding and ground truth 
+    Save the results.
+    @param A the kNN graph
+    @param A_true the ground truth kNN graph
+    @param n_neighbors number of neighbors for kNN graph
+    @param n_distributions number of nodes in graph, generally dimension of array
+    """
 
+    accuracy = np.sum((A_true + A) == 2) / (n_neighbors * n_distributions)
+    return accuracy
+
+def knn_graph(data, n_neighbors):
+    """
+    Create kNN graph on dataset and save the results.
+    @param data the data matrix
+    @param n_neighbors number of neighbors for kNN graph
+    """
+
+    A = kneighbors_graph(data, n_neighbors, mode='connectivity', include_self=False)
+    data_knn = A.toarray()
+    return data_knn
+
+def knn_reference(gt_knn, n_neighbors, path=None):
+    """
+    Create kNN graph on dataset and reference embeddings and save the results.
+    @param gt_knn the ground truth kNN graph
+    @param n_neighbors number of neighbors for kNN graph
+    @param path a path to directory containing a non_mural directory
+    with the embeddings
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(path):
+        print("Error: Path does not exist")
+        return
+
+    if not os.path.isdir(f"{path}/non_mural"):
+        os.mkdir(f"{path}/non_mural")
+    
+    data_pca = np.load(f"{path}/non_mural/pca.npy")
+    data_tsne = np.load(f"{path}/non_mural/tsne.npy")
+    data_phate = np.load(f"{path}/non_mural/phate.npy")
+    
+    pca_knn = knn_graph(data_pca, n_neighbors)
+    tsne_knn = knn_graph(data_tsne, n_neighbors)
+    phate_knn = knn_graph(data_phate, n_neighbors)
+
+    acc_pca = accuracy(pca_knn, gt_knn, n_neighbors, pca_knn.shape[1])
+    acc_tsne = accuracy(tsne_knn, gt_knn, n_neighbors, tsne_knn.shape[1])
+    acc_phate = accuracy(phate_knn, gt_knn, n_neighbors, phate_knn.shape[1])
+
+
+    f = open(f"{path}/knn_reference_{n_neighbors}.txt", "w")
+    f.write(f"Accuracy via kNN for PCA with {n_neighbors} neighbors is {acc_pca}\n")
+    f.write(f"Accuracy via kNN for tSNE with {n_neighbors} neighbors is {acc_tsne}\n")
+    f.write(f"Accuracy via kNN for PHATE with {n_neighbors} neighbors is {acc_phate}\n")
+    f.close()
+
+def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=default_depths):
+    """
+    Create kNN graph on dataset and reference embeddings and save the results.
+    @param data the data matrix
+    @param gt_knn the ground truth kNN graph
+    @param n_neighbors number of neighbors for kNN graph
+    @param path the path to a directory with the MURAL embedding directories
+    @param trees an array of numbers of trees
+    @param depths an array of depth parameters
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(path):
+        print("Error: Path does not exist")
+        return
+
+    f = open(f"{path}/knn_mural_{n_neighbors}.txt", "w")
+
+    for t in trees:
+        for d in depths:
+            exponential_mural = np.load(f"{path}/{t}trees{d}depth/exponential_mural.npy")
+            binary_mural = np.load(f"{path}/{t}trees{d}depth/binary_mural.npy")
+
+            knn_mural_e = knn_graph(exponential_mural, n_neighbors)
+            knn_mural_b = knn_graph(binary_mural, n_neighbors)	    
+
+            acc_mural_e = accuracy(knn_mural_e, gt_knn, n_neighbors, knn_mural_e.shape[1])
+            acc_mural_b = accuracy(knn_mural_b, gt_knn, n_neighbors, knn_mural_b.shape[1])
+  
+            
+            f.write(f"For {t} trees, {d} depth:\n")
+            f.write(f"Accuracy via kNN for MURAL (e) with {n_neighbors} neighbors is {acc_mural_e}\n")
+            f.write(f"Accuracy via kNN for MURAL (b) with {n_neighbors} neighbors is {acc_mural_b}\n")
+            f.write("\n")
+
+    f.close()
+    
 def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None,
                   missing_profile=1, weighted=True, geometric=False, optimize="max",
                   use_missing=False, entropy="one", imputed=None, avoid=None, layers=1,
-                  quad=False):
+                  quad=False, labels_binary=False):
     """
     Train MURAL forests and save them and their embeddings.
 
     @param data the data matrix to train MURAL forests on
     @param labels the labels used for coloring plots
+    @param labels_binary default false, but if True will change color to blue/orange
     @param sampled_features the number of features for each node to randomly look at
     @param batch_size the number of observations to subsample to
     @param min_leaf size the minimum number of observations needed to split
@@ -375,6 +519,6 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
-            test_forest(forest, data, labels, path, geometric=geometric)
+            test_forest(forest, data, labels, labels_binary, path, geometric=geometric)
 
     f.close()
