@@ -23,13 +23,15 @@ def binary_affinity(result_list):
     return M_acc / len(result_list)
 
 
-def adjacency_to_distances(Al, Ll=None, geometric=False):
+def adjacency_to_distances(Al, Ll=None, weighted=True, geometric=False):
     """
     Takes adjacency list and returns a distance matrix on its decision tree.
     Manually runs breadth-first search to avoid calling networkx methods
     and getting a dictionary intermediate.
     @param Al an adjacency list of a tree
     @param Ll a list of leaves of a tree (optional)
+    @param weighted True (default) or False
+    @param geometric True or False (default)
     @return a distance matrix on the tree
     """
 
@@ -66,7 +68,12 @@ def adjacency_to_distances(Al, Ll=None, geometric=False):
                     visited[j] = 1
 
                     # j's distance from node i is w more than that from i to j's predecessor (curr)
-                    dist[i][j] = dist[i][curr] + w
+                    if ((not weighted) and w != 0):
+                        ww = 1
+                    else:
+                        ww = w
+
+                    dist[i][j] = dist[i][curr] + ww
 
                     # Add j to the queue so that we can visit its neighbors later
                     q.append(j)
