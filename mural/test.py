@@ -357,7 +357,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None,
                   missing_profile=1, weighted=True, geometric=False, optimize="max",
                   use_missing=False, entropy="one", imputed=None, avoid=None, layers=1,
-                  quad=False):
+                  quad=False, m_ind=None, b_ind=None):
     """
     Train MURAL forests and save them and their embeddings.
 
@@ -389,7 +389,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                                         min_leaf_size=min_leaf_size, decay=decay, imputed=imputed,
                                         missing_profile=missing_profile, weighted=weighted, optimize=optimize,
                                         use_missing=use_missing, entropy=entropy, avoid=avoid, layers=layers,
-                                        quad=quad)
+                                        quad=quad, m_ind=m_ind, b_ind=b_ind)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
