@@ -738,7 +738,7 @@ class UnsupervisedTree():
             # Recursion base case.
             return
         
-        if self.m_ind[self.split_feature] == 1:
+        if self.root.m_ind[self.split_feature] == 1:
             is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
             if is_missing:
