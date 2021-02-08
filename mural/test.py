@@ -282,6 +282,38 @@ def test_forest(forest, data, labels, path=None, geometric=False):
                           figsize=(7,5),
                           filename=f"{path}/{num_trees}trees{depth}depth/exponential_unweighted")
 
+
+def save_forest(forest, data, path=None, geometric=False):
+    """
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(path):
+        print("Error: Path does not exist")
+        return
+
+    num_trees = forest.n_estimators
+    depth = forest.depth
+
+    if not os.path.isdir(f"{path}/{num_trees}trees{depth}depth"):
+        os.mkdir(f"{path}/{num_trees}trees{depth}depth")
+
+    # Run binary affinities
+    forest_fitted = forest.apply(data)
+    b_forest = binary_affinity(forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/binary_affinity.npy", b_forest)
+
+    # For exponential affinities
+    weighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=True) for A, L in zip(forest.adjacency(), forest.leaves())]
+    weighted_avg_distance = get_average_distance(weighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/weighted_distance.npy", weighted_avg_distance)
+
+    # Try unweighted edges
+    unweighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=False) for A, L in zip(forest.adjacency(), forest.leaves())]
+    unweighted_avg_distance = get_average_distance(unweighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/unweighted_distance.npy", unweighted_avg_distance)
+
     
 def demap_reference(data, path=None):
     """
@@ -479,25 +511,32 @@ def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=defaul
         return
 
     f = open(f"{path}/knn_mural_{n_neighbors}.txt", "w")
+    g = open(f"{path}/knn_mural_{n_neighbors}.csv", "a")
+    g.write(f"n_neighbors;num_trees;depth;affinity_type;mural_acc\n")
 
     for t in trees:
         for d in depths:
-            exponential_weighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_weighted_mural.npy")
-            exponential_unweighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_unweighted_mural.npy")
-            binary_mural = np.load(f"{path}/{t}trees{d}depth/binary_mural.npy")
+            b_aff = np.load(f"{path}/{t}trees{d}depth/binary_affinity.npy")
+            w_dist = np.load(f"{path}/{t}trees{d}depth/weighted_distance.npy")
+            uw_dist = np.load(f"{path}/{t}trees{d}depth/unweighted_distance.npy")
 
-            knn_mural_w_e = knn_graph(exponential_weighted_mural, n_neighbors)
-            knn_mural_uw_e = knn_graph(exponential_unweighted_mural, n_neighbors)
-            knn_mural_b = knn_graph(binary_mural, n_neighbors)	    
+            knn_mural_b = knn_graph(b_aff, n_neighbors)
+            knn_mural_we = knn_graph(w_dist, n_neighbors)
+            knn_mural_uwe = knn_graph(uw_dist, n_neighbors)   
 
-            acc_mural_w_e = accuracy(knn_mural_w_e, gt_knn, n_neighbors, knn_mural_w_e.shape[1])
-            acc_mural_uw_e = accuracy(knn_mural_uw_e, gt_knn, n_neighbors, knn_mural_uw_e.shape[1])
             acc_mural_b = accuracy(knn_mural_b, gt_knn, n_neighbors, knn_mural_b.shape[1])
-  
+            acc_mural_we = accuracy(knn_mural_we, gt_knn, n_neighbors, knn_mural_we.shape[1])
+            acc_mural_uwe = accuracy(knn_mural_uwe, gt_knn, n_neighbors, knn_mural_uwe.shape[1])
+            
             f.write(f"For {t} trees, {d} depth:\n")
-            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_w_e}\n")
-            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_uw_e}\n")
             f.write(f"Accuracy via kNN for MURAL (b) with {n_neighbors} neighbors is {acc_mural_b}\n")
+            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_we}\n")
+            f.write(f"Accuracy via kNN for MURAL (uw, e) with {n_neighbors} neighbors is {acc_mural_uwe}\n")
             f.write("\n")
 
+            g.write(f"{n_neighbors};{t};{d};b;{acc_mural_b}\n")
+            g.write(f"{n_neighbors};{t};{d};we;{acc_mural_we}\n")
+            g.write(f"{n_neighbors};{t};{d};uwe;{acc_mural_uwe}\n")
+
     f.close()
+    g.close()
