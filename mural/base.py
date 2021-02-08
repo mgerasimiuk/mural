@@ -474,7 +474,7 @@ class UnsupervisedTree():
                     prob = np.ones(shape=self.X.shape[1])
                     mask = (self.root.m_ind == 1)
                     if self.root.avoid_binary:
-                        mask = mask | (self.b_ind == 1)
+                        mask = mask | (self.root.b_ind == 1)
                     prob[mask] = 0
                     p_sum = np.sum(prob)
                     if p_sum == 0:
@@ -522,7 +522,7 @@ class UnsupervisedTree():
                 prob = np.ones(shape=self.X.shape[1])
                 mask = (self.root.m_ind == 1)
                 if self.root.avoid_binary:
-                    mask = mask | (self.b_ind == 1)
+                    mask = mask | (self.root.b_ind == 1)
                 prob[mask] = 0
                 p_sum = np.sum(prob)
                 if p_sum == 0:
@@ -745,7 +745,7 @@ class UnsupervisedTree():
                 t = self.left
             else:
                 t = self.right
-        elif self.b_ind[self.split_feature] == 1:
+        elif self.root.b_ind[self.split_feature] == 1:
             if x_i[self.split_feature] == 0:
                 t = self.left
             else:
