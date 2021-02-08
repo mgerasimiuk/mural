@@ -32,7 +32,7 @@ class UnsupervisedForest():
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
                 decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=True,
-                avoid=None, layers=1, quad=False, m_ind=None, b_ind=None):
+                avoid=None, layers=1, quad=False, m_ind=None, b_ind=None, avoid_binary=False):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -85,6 +85,7 @@ class UnsupervisedForest():
         self.depth = depth
         self.min_leaf_size = min_leaf_size
         self.avoid = avoid
+        self.avoid_binary = avoid_binary
         self.layers = layers
         self.quad = quad
         
@@ -151,6 +152,8 @@ class UnsupervisedForest():
         elif self.avoid == "hard" or self.avoid == "hard2" or self.avoid == "mix" or self.avoid == "mix2":
             prob = np.ones(shape=self.X.shape[1])
             mask = np.any(np.isnan(self.X), axis=0)
+            if self.avoid_binary:
+                mask = mask | (self.b_ind == 1)
             prob[mask] = 0
             p_sum = np.sum(prob)
             if p_sum == 0:
@@ -173,7 +176,7 @@ class UnsupervisedForest():
                                 depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
                                 m_ind=self.m_ind, b_ind=self.b_ind, decay=self.decay, entropy=self.entropy, optimize=self.optimize,
                                 use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
-                                root_index=root_index, avoid=self.avoid, layers=self.layers, quad=self.quad)
+                                root_index=root_index, avoid=self.avoid, layers=self.layers, quad=self.quad, avoid_binary=self.avoid_binary)
     
     def apply(self, x):
         """
@@ -259,7 +262,7 @@ class UnsupervisedTree():
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
                  weight, m_ind=None, b_ind=None, decay=0.5, entropy="one", optimize="max", use_missing=True, avoid=None, layers=1,
                  quad=False, override=None, rng=None, imputer=None, root=None, parent=None, forest=None, 
-                 root_index=0, mode=1):
+                 root_index=0, mode=1, avoid_binary=False):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -338,6 +341,7 @@ class UnsupervisedTree():
                 self.prob = None
 
             self.avoid = avoid
+            self.avoid_binary = avoid_binary
             self.layers = layers
             self.quad = quad
 
@@ -468,7 +472,9 @@ class UnsupervisedTree():
                 if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
                 #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
                     prob = np.ones(shape=self.X.shape[1])
-                    mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
+                    mask = (self.root.m_ind == 1)
+                    if self.root.avoid_binary:
+                        mask = mask | (self.b_ind == 1)
                     prob[mask] = 0
                     p_sum = np.sum(prob)
                     if p_sum == 0:
@@ -514,7 +520,9 @@ class UnsupervisedTree():
             if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
             #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
                 prob = np.ones(shape=self.X.shape[1])
-                mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
+                mask = (self.root.m_ind == 1)
+                if self.root.avoid_binary:
+                    mask = mask | (self.b_ind == 1)
                 prob[mask] = 0
                 p_sum = np.sum(prob)
                 if p_sum == 0:
