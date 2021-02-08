@@ -239,6 +239,7 @@ def test_forest(forest, data, labels, path=None, geometric=False):
     # Run binary affinities
     forest_fitted = forest.apply(data)
     b_forest = binary_affinity(forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/binary_affinity.npy", b_forest)
 
     # Plot binary affinities with PHATE by passing in affinity matrix
     phate_b = phate.PHATE(knn_dist="precomputed_affinity")
@@ -255,6 +256,7 @@ def test_forest(forest, data, labels, path=None, geometric=False):
     # For exponential affinities
     weighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=True) for A, L in zip(forest.adjacency(), forest.leaves())]
     weighted_avg_distance = get_average_distance(weighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/weighted_distance.npy", weighted_avg_distance)
 
     # Plot exponential affinities with PHATE by passing in distance matrix
     phate_w_e = phate.PHATE(knn_dist="precomputed_distance")
@@ -270,6 +272,7 @@ def test_forest(forest, data, labels, path=None, geometric=False):
     # Try unweighted edges
     unweighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=False) for A, L in zip(forest.adjacency(), forest.leaves())]
     unweighted_avg_distance = get_average_distance(unweighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/unweighted_distance.npy", unweighted_avg_distance)
 
     # Plot exponential affinities with PHATE
     phate_uw_e = phate.PHATE(knn_dist="precomputed_distance")
