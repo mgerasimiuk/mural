@@ -32,7 +32,7 @@ class UnsupervisedForest():
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
                 decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=True,
-                avoid=None, layers=1, quad=False, m_ind=None, b_ind=None,):
+                avoid=None, layers=1, quad=False, m_ind=None, b_ind=None):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
