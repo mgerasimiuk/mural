@@ -22,6 +22,7 @@ default_depths = [4, 6, 10]
 def graph_vars(df, vars_list):
     """
     Make plots of data distributions.
+
     @param df a pandas DataFrame
     @param a list of variables to visualize
     """
@@ -31,6 +32,7 @@ def graph_vars(df, vars_list):
 def make_embedded_swiss_roll(dims=3):
     """
     Make a dataset of the Swiss roll manifold embedded in multiple dimensions.
+
     @param dims the number of dimensions to embed in
     @return the data matrix for the embedded Swiss roll
     """
@@ -50,6 +52,7 @@ def make_embedded_swiss_roll(dims=3):
 def make_embedded_moons(dims=2):
     """
     Make a dataset of the two moons manifold embedded in multiple dimensions.
+
     @param dims the number of dimensions to embed in
     @return the data matrix for the embedded moons
     """
@@ -67,6 +70,7 @@ def make_embedded_moons(dims=2):
 def make_splatter():
     """
     Make a splatter dataset.
+
     @return the true and noisy data matrices for the splatter dataset
     """
     
@@ -88,6 +92,7 @@ def make_missing_middle(data, n_missing, idxs=None):
     Take a dataset and create two datasets, one with missing (NaN)
     values in the interquartile range, another with all NaNs replaced
     with the mean.
+
     @param data the data matrix
     @param n_missing an array with numbers of observations with missing values in each column
     @param idxs the column indices to do this process in
@@ -127,6 +132,7 @@ def make_missing_random(data, n_missing, idxs=None):
     """
     Take a dataset and create two datasets, one with missing (NaN)
     values randomly, another with all NaNs replaced with the mean.
+
     @param data the data matrix
     @param n_missing an array with numbers of observations with missing values in each column
     @param idxs the column indices to do this process in
@@ -159,6 +165,7 @@ def make_missing_random(data, n_missing, idxs=None):
 def make_embeddings(data, labels, path=None):
     """
     Make PCA, tSNE, and PHATE embeddings of the dataset and save them.
+
     @param data the data to apply it to
     @param labels the labels used for coloring
     @param path the path to save embeddings and plots in, CWD by default
@@ -210,6 +217,7 @@ def make_embeddings(data, labels, path=None):
 def test_forest(forest, data, labels, path=None, geometric=False):
     """
     Perform tests for a MURAL forest and saves embeddings and plots.
+
     @param forest a fitted UnsupervisedForest to test
     @param data the data to apply it to
     @param labels the labels used for coloring
@@ -274,10 +282,43 @@ def test_forest(forest, data, labels, path=None, geometric=False):
                           figsize=(7,5),
                           filename=f"{path}/{num_trees}trees{depth}depth/exponential_unweighted")
 
+
+def save_forest(forest, data, path=None, geometric=False):
+    """
+    """
+
+    if path is None:
+        path = os.getcwd()
+    elif not os.path.isdir(path):
+        print("Error: Path does not exist")
+        return
+
+    num_trees = forest.n_estimators
+    depth = forest.depth
+
+    if not os.path.isdir(f"{path}/{num_trees}trees{depth}depth"):
+        os.mkdir(f"{path}/{num_trees}trees{depth}depth")
+
+    # Run binary affinities
+    forest_fitted = forest.apply(data)
+    b_forest = binary_affinity(forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/binary_affinity.npy", b_forest)
+
+    # For exponential affinities
+    weighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=True) for A, L in zip(forest.adjacency(), forest.leaves())]
+    weighted_avg_distance = get_average_distance(weighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/weighted_distance.npy", weighted_avg_distance)
+
+    # Try unweighted edges
+    unweighted_D_list = [adjacency_to_distances(A, L, geometric=geometric, weighted=False) for A, L in zip(forest.adjacency(), forest.leaves())]
+    unweighted_avg_distance = get_average_distance(unweighted_D_list, forest_fitted)
+    np.save(f"{path}/{num_trees}trees{depth}depth/unweighted_distance.npy", unweighted_avg_distance)
+
     
 def demap_reference(data, path=None):
     """
     Run DEMaP on dataset and reference embeddings and save the results.
+
     @param data the data matrix
     @param path a path to directory containing a non_mural directory
     with the embeddings
@@ -310,6 +351,7 @@ def demap_reference(data, path=None):
 def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
     """
     Run DEMaP on MURAL embeddings and save the results.
+
     @param gt the ground truth
     @param path the path to a directory with the MURAL embedding directories
     @param trees an array of numbers of trees
@@ -350,6 +392,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                   quad=False, b_ind=None, m_ind=None):
     """
     Train MURAL forests and save them and their embeddings.
+
     @param data the data matrix to train MURAL forests on
     @param labels the labels used for coloring plots
     @param sampled_features the number of features for each node to randomly look at
@@ -468,25 +511,32 @@ def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=defaul
         return
 
     f = open(f"{path}/knn_mural_{n_neighbors}.txt", "w")
+    g = open(f"{path}/knn_mural_{n_neighbors}.csv", "a")
+    g.write(f"n_neighbors;num_trees;depth;affinity_type;mural_acc\n")
 
     for t in trees:
         for d in depths:
-            exponential_weighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_weighted_mural.npy")
-            exponential_unweighted_mural = np.load(f"{path}/{t}trees{d}depth/exponential_unweighted_mural.npy")
-            binary_mural = np.load(f"{path}/{t}trees{d}depth/binary_mural.npy")
+            b_aff = np.load(f"{path}/{t}trees{d}depth/binary_affinity.npy")
+            w_dist = np.load(f"{path}/{t}trees{d}depth/weighted_distance.npy")
+            uw_dist = np.load(f"{path}/{t}trees{d}depth/unweighted_distance.npy")
 
-            knn_mural_w_e = knn_graph(exponential_weighted_mural, n_neighbors)
-            knn_mural_uw_e = knn_graph(exponential_unweighted_mural, n_neighbors)
-            knn_mural_b = knn_graph(binary_mural, n_neighbors)	    
+            knn_mural_b = knn_graph(b_aff, n_neighbors)
+            knn_mural_we = knn_graph(w_dist, n_neighbors)
+            knn_mural_uwe = knn_graph(uw_dist, n_neighbors)   
 
-            acc_mural_w_e = accuracy(knn_mural_w_e, gt_knn, n_neighbors, knn_mural_w_e.shape[1])
-            acc_mural_uw_e = accuracy(knn_mural_uw_e, gt_knn, n_neighbors, knn_mural_uw_e.shape[1])
             acc_mural_b = accuracy(knn_mural_b, gt_knn, n_neighbors, knn_mural_b.shape[1])
-  
+            acc_mural_we = accuracy(knn_mural_we, gt_knn, n_neighbors, knn_mural_we.shape[1])
+            acc_mural_uwe = accuracy(knn_mural_uwe, gt_knn, n_neighbors, knn_mural_uwe.shape[1])
+            
             f.write(f"For {t} trees, {d} depth:\n")
-            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_w_e}\n")
-            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_uw_e}\n")
             f.write(f"Accuracy via kNN for MURAL (b) with {n_neighbors} neighbors is {acc_mural_b}\n")
+            f.write(f"Accuracy via kNN for MURAL (w, e) with {n_neighbors} neighbors is {acc_mural_we}\n")
+            f.write(f"Accuracy via kNN for MURAL (uw, e) with {n_neighbors} neighbors is {acc_mural_uwe}\n")
             f.write("\n")
 
+            g.write(f"{n_neighbors};{t};{d};b;{acc_mural_b}\n")
+            g.write(f"{n_neighbors};{t};{d};we;{acc_mural_we}\n")
+            g.write(f"{n_neighbors};{t};{d};uwe;{acc_mural_uwe}\n")
+
     f.close()
+    g.close()
