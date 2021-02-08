@@ -94,7 +94,7 @@ class UnsupervisedForest():
             self.m_ind = m_ind
         
         if b_ind is None:
-            mask = np.any(~np.isnan(X) & X != 0, axis=0) & np.any(~np.isnan(X) & X != 1, axis=0)
+            mask = np.any(~np.isnan(X) & (X != 0), axis=0) & np.any(~np.isnan(X) & (X != 1), axis=0)
             self.b_ind = np.ones(shape=X.shape[1])
             self.b_ind[mask] = 0
         else:
@@ -632,14 +632,14 @@ class UnsupervisedTree():
             # Recursion base case. Say which leaf the observation ends in.
             return self.index
         
-        if self.m_ind[self.split_feature] == 1:
+        if self.root.m_ind[self.split_feature] == 1:
             is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
             if is_missing:
                 t = self.left
             else:
                 t = self.right
-        elif self.b_ind[self.split_feature] == 1:
+        elif self.root.b_ind[self.split_feature] == 1:
             if x_i[self.split_feature] == 0:
                 t = self.left
             else:
