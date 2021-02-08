@@ -32,7 +32,7 @@ class UnsupervisedForest():
     """
     def __init__(self, X, n_estimators, n_sampled_features, batch_size, imputed=None, depth=4, min_leaf_size=2, 
                 decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=True,
-                avoid=None, layers=1, quad=False, m_ind=None, b_ind=None,):
+                avoid=None, layers=1, quad=False):
         """
         Create and fit a random forest for unsupervised learning.
         @param X data matrix to fit to
@@ -87,18 +87,6 @@ class UnsupervisedForest():
         self.avoid = avoid
         self.layers = layers
         self.quad = quad
-        
-        if m_ind is None:
-            self.m_ind = np.any(np.isnan(X), axis=0)
-        else:
-            self.m_ind = m_ind
-        
-        if b_ind is None:
-            mask = np.any(~np.isnan(X) & (X != 0), axis=0) & np.any(~np.isnan(X) & (X != 1), axis=0)
-            self.b_ind = np.ones(shape=X.shape[1])
-            self.b_ind[mask] = 0
-        else:
-            self.b_ind = b_ind
 
         # Experiment with unweighted (all 1) edges
         self.weighted = weighted
@@ -171,7 +159,7 @@ class UnsupervisedForest():
 
         return UnsupervisedTree(self.X, imputed, self.n_sampled_features, chosen_inputs, chosen_features,
                                 depth=self.depth, min_leaf_size=self.min_leaf_size, weight=2 ** (self.depth - 1),
-                                m_ind=self.m_ind, b_ind=self.b_ind, decay=self.decay, entropy=self.entropy, optimize=self.optimize,
+                                decay=self.decay, entropy=self.entropy, optimize=self.optimize,
                                 use_missing=self.use_missing, rng=rng, imputer=imputer, forest=self,
                                 root_index=root_index, avoid=self.avoid, layers=self.layers, quad=self.quad)
     
@@ -257,9 +245,9 @@ class UnsupervisedTree():
     Decision tree class for use in unsupervised learning of data involving missingness.
     """
     def __init__(self, X, imputed, n_sampled_features, chosen_inputs, chosen_features, depth, min_leaf_size, 
-                 weight, m_ind=None, b_ind=None, decay=0.5, entropy="one", optimize="max", use_missing=True, avoid=None, layers=1,
+                 weight, decay=0.5, entropy="one", optimize="max", use_missing=True, avoid=None, layers=1,
                  quad=False, override=None, rng=None, imputer=None, root=None, parent=None, forest=None, 
-                 root_index=0, mode=1):
+                 root_index=0):
         """
         Create and fit an unsupervised decision tree.
         @param X data matrix
@@ -281,8 +269,6 @@ class UnsupervisedTree():
             self.chosen_inputs = np.arange[X.shape[0]]
         else:
             self.chosen_inputs = chosen_inputs
-        
-        self.mode = mode
 
         if root is None:
             self.root = self
@@ -291,9 +277,6 @@ class UnsupervisedTree():
 
             self.imputed = imputed
             self.imputer = imputer
-
-            self.m_ind = m_ind
-            self.b_ind = b_ind
             
             # Create the adjacency list
             self.Al = [[]]
@@ -381,157 +364,102 @@ class UnsupervisedTree():
         """
         Find the best split for the tree by checking all splits over all variables.
         """
-        if self.mode == 1:
-            if self.depth <= 0:
-                # Do not split the data if depth exhausted
-                self.root.Ll.append(self.index)
-                return
 
-            for var_index in self.chosen_features:
-                # Look for the best decision (if any are possible)
-                self.find_better_split(var_index)
-            
-            if self.score == np.NINF or self.score == np.inf:
-                # Do not split the data if decisions exhausted
-                self.root.Ll.append(self.index)
-                return
-                
-            split_column = self.split_column() # This is the whole column, not just the feature index
+        if self.depth <= 0:
+            # Do not split the data if depth exhausted
+            self.root.Ll.append(self.index)
+            return
 
-            if self.root.m_ind[self.split_feature] == 1:
-                where_missing = np.nonzero(np.isnan(split_column))[0]
-                not_missing = np.nonzero(~np.isnan(split_column))[0]
-
-                # Add new nodes to the adjacency list
-                self.root.Al.append([])
-                self.root.Al.append([])
-
-                m_prob = np.ones(shape=self.X.shape[1])
-                mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
-                m_prob[mask] = 0
-                p_sum = np.sum(m_prob)
-                if p_sum == 0:
-                    m_prob = None
-                else:
-                    m_prob = m_prob / p_sum
-
-                left_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=m_prob, replace=False))
-                right_branch_features = left_branch_features
-
-                self.left = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_missing],
-                                                left_branch_features, self.depth, self.min_leaf_size,
-                                                self.weight, self.decay, root=self.root, parent=self, override=0,
-                                                mode=2)
-
-                self.right = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[not_missing],
-                                                right_branch_features, self.depth, self.min_leaf_size,
-                                                self.weight, self.decay, root=self.root, parent=self, override=0,
-                                                mode=2)
-            elif self.root.b_ind[self.split_feature] == 1:
-                where_zero = np.nonzero(split_column == 0)[0]
-                where_one = np.nonzero(split_column != 0)[0]
-
-                # Add new nodes to the adjacency list
-                self.root.Al.append([])
-                self.root.Al.append([])
-
-                m_prob = np.ones(shape=self.X.shape[1])
-                mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
-                m_prob[mask] = 0
-                p_sum = np.sum(m_prob)
-                if p_sum == 0:
-                    m_prob = None
-                else:
-                    m_prob = m_prob / p_sum
-
-                left_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=m_prob, replace=False))
-                right_branch_features = left_branch_features
-
-                self.left = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_zero],
-                                                left_branch_features, self.depth, self.min_leaf_size,
-                                                self.weight, self.decay, root=self.root, parent=self, override=0,
-                                                mode=2)
-
-                self.right = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_one],
-                                                right_branch_features, self.depth, self.min_leaf_size,
-                                                self.weight, self.decay, root=self.root, parent=self, override=0,
-                                                mode=2)
-            else:
-                where_low = np.nonzero(split_column <= self.threshold)[0] # Indices in the subset
-                where_high = np.nonzero(split_column > self.threshold)[0]
+        for var_index in self.chosen_features:
+            # Look for the best decision (if any are possible)
+            self.find_better_split(var_index)
         
-                # Add new nodes to the adjacency list
-                self.root.Al.append([])
-                self.root.Al.append([])
+        if self.score == np.NINF or self.score == np.inf:
+            # Do not split the data if decisions exhausted
+            self.root.Ll.append(self.index)
+            return
+              
+        split_column = self.split_column() # This is the whole column, not just the feature index
+        where_missing = np.nonzero(np.isnan(split_column))[0] # Indices in self.chosen_inputs of data with NaNs
 
-                prob = self.root.prob
-                if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
-                #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
-                    prob = np.ones(shape=self.X.shape[1])
-                    mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
-                    prob[mask] = 0
-                    p_sum = np.sum(prob)
-                    if p_sum == 0:
-                        prob = None
-                    else:
-                        prob = prob / p_sum
+        # Split missing values between regular nodes and missing node based on missing_profile
+        profile = int(self.root.missing_profile[self.split_feature] * len(where_missing))
+        permute = self.root.rng.permutation(where_missing)
+        to_missing = permute[0:profile] # These go to the missing node
+        to_rest = permute[profile:] # These go to 50/50 to the other two
 
-                # Randomly choose the features for each branch
-                left_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
-                right_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
+        # If there are observations with missingness left:
+        if profile != len(where_missing):
+            half = len(where_missing) // 2
+            permute = self.root.rng.permutation(to_rest)
+            missing_to_low = self.chosen_inputs[permute[0:half]] # Row indices in X
+            missing_to_high = self.chosen_inputs[permute[half:]]
+        else:
+            missing_to_low = []
+            missing_to_high = []
 
-                self.left = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_low], left_branch_features, 
-                                            self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                            self.decay, root=self.root, parent=self, mode=1)
-                self.right = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_high], right_branch_features, 
-                                            self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                            self.decay, root=self.root, parent=self, mode=1)
-        elif self.mode == 2:
-            if self.depth <= 0:
-                # Do not split the data if depth exhausted
-                self.root.Ll.append(self.index)
-                return
+        not_missing = np.nonzero(~np.isnan(split_column))[0]
+        among_chosen = self.chosen_inputs[not_missing] # Subset of chosen_inputs, row indices in X
+        complete_cases = self.X[among_chosen, self.split_feature]
 
-            for var_index in self.chosen_features:
-                # Look for the best decision (if any are possible)
-                self.find_better_split(var_index)
-            
-            if self.score == np.NINF or self.score == np.inf:
-                # Do not split the data if decisions exhausted
-                self.root.Ll.append(self.index)
-                return
-                
-            split_column = self.split_column() # This is the whole column, not just the feature index
-
-            where_low = np.nonzero(split_column <= self.threshold)[0] # Indices in the subset
-            where_high = np.nonzero(split_column > self.threshold)[0]
+        where_low = np.nonzero(complete_cases <= self.threshold)[0] # Indices in the subset
+        where_high = np.nonzero(complete_cases > self.threshold)[0]
     
-            # Add new nodes to the adjacency list
-            self.root.Al.append([])
-            self.root.Al.append([])
+        # Randomly apportion randomly missing values
+        joint_low = np.array(np.concatenate((among_chosen[where_low], missing_to_low), axis=None), dtype=int) # Row indices in X
+        joint_high = np.array(np.concatenate((among_chosen[where_high], missing_to_high), axis=None), dtype=int)
+        
+        # Add new nodes to the adjacency list
+        self.root.Al.append([])
+        self.root.Al.append([])
+        self.root.Al.append([])
 
-            prob = self.root.prob
-            if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
-            #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
-                prob = np.ones(shape=self.X.shape[1])
-                mask = (self.root.m_ind == 1) | (self.root.b_ind == 1)
-                prob[mask] = 0
-                p_sum = np.sum(prob)
-                if p_sum == 0:
-                    prob = None
-                else:
-                    prob = prob / p_sum
+        prob = self.root.prob
+        if self.root.avoid is not None and (self.root.avoid == "hard" or self.root.avoid == "mix") and self.depth >= self.root.depth - (self.root.layers - 1):
+        #if self.parent is not None and self.root.avoid is not None and (self.root.avoid == "hard2" or self.root.avoid == "mix2") and self.depth == self.root.depth - 1:
+            prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            prob[mask] = 0
+            p_sum = np.sum(prob)
+            if p_sum == 0:
+                prob = None
+            else:
+                prob = prob / p_sum
 
-            # Randomly choose the features for each branch
-            left_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
-            right_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
+        if self.root.quad: # Force a different probability distribution for the replacement split in the missing case
+            m_prob = np.ones(shape=self.X.shape[1])
+            mask = np.any(np.isnan(self.X), axis=0)
+            m_prob[mask] = 0
+            p_sum = np.sum(m_prob)
+            if p_sum == 0:
+                m_prob = None
+            else:
+                m_prob = m_prob / p_sum
+        else:
+            m_prob = prob
 
-            self.left = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_low], left_branch_features, 
-                                        self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                        self.decay, root=self.root, parent=self, mode=1)
-            self.right = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[where_high], right_branch_features, 
-                                        self.depth - 1, self.min_leaf_size, self.weight / 2,
-                                        self.decay, root=self.root, parent=self, mode=1)
+        # Randomly choose the features for each branch
+        m_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=m_prob, replace=False))
+        l_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
+        h_branch_features = np.sort(self.root.rng.choice(self.X.shape[1], size=self.n_sampled_features, p=prob, replace=False))
+
+        # Create three subtrees for the data to go to
+        # If we are using incomplete batches of data, we might need the "missing" subtree even if no missingness found in batch
+        if self.root.quad: # This simulates a four-way split
+            self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
+                                            m_branch_features, self.depth, self.min_leaf_size,
+                                            self.weight, self.decay, root=self.root, parent=self, override=0)
+        else:
+            self.missing = UnsupervisedTree(self.X, None, self.n_sampled_features, self.chosen_inputs[to_missing],
+                                            m_branch_features, self.depth - 1, self.min_leaf_size,
+                                            self.weight * self.decay, self.decay, root=self.root, parent=self)
+
+        self.low = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_low, l_branch_features, 
+                                    self.depth - 1, self.min_leaf_size, self.weight / 2,
+                                    self.decay, root=self.root, parent=self)
+        self.high = UnsupervisedTree(self.X, None, self.n_sampled_features, joint_high, h_branch_features, 
+                                     self.depth - 1, self.min_leaf_size, self.weight / 2,
+                                     self.decay, root=self.root, parent=self)
 
     def find_better_split(self, index):
         """
@@ -632,23 +560,22 @@ class UnsupervisedTree():
             # Recursion base case. Say which leaf the observation ends in.
             return self.index
         
-        if self.root.m_ind[self.split_feature] == 1:
-            is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
+        is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-            if is_missing:
-                t = self.left
-            else:
-                t = self.right
-        elif self.root.b_ind[self.split_feature] == 1:
-            if x_i[self.split_feature] == 0:
-                t = self.left
-            else:
-                t = self.right
+        prob = self.root.missing_profile[self.split_feature]
+        rolled = self.root.rng.random() <= prob
+
+        if is_missing and not rolled:
+            auto_low = self.root.rng.choice([True, False])
         else:
-            if x_i[self.split_feature] <= self.threshold:
-                t = self.left
-            else:
-                t = self.right
+            auto_low = False
+
+        if is_missing and rolled:
+            t = self.missing
+        elif auto_low or x_i[self.split_feature] <= self.threshold:
+            t = self.low
+        else:
+            t = self.high
         
         # Traverse the tree
         return t.apply_row(x_i)
@@ -730,23 +657,22 @@ class UnsupervisedTree():
             # Recursion base case.
             return
         
-        if self.m_ind[self.split_feature] == 1:
-            is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
+        is_missing = x_i[self.split_feature] is None or np.isnan(x_i[self.split_feature])
 
-            if is_missing:
-                t = self.left
-            else:
-                t = self.right
-        elif self.b_ind[self.split_feature] == 1:
-            if x_i[self.split_feature] == 0:
-                t = self.left
-            else:
-                t = self.right
+        prob = self.root.missing_profile[self.split_feature]
+        rolled = self.root.rng.random() <= prob
+
+        if is_missing and not rolled:
+            auto_low = self.root.rng.choice([True, False])
         else:
-            if x_i[self.split_feature] <= self.threshold:
-                t = self.left
-            else:
-                t = self.right
+            auto_low = False
+
+        if is_missing and rolled:
+            t = self.missing
+        elif auto_low or x_i[self.split_feature] <= self.threshold:
+            t = self.low
+        else:
+            t = self.high
         
         # Traverse the tree
         t.apply_wasserstein(x_i, x_results)
