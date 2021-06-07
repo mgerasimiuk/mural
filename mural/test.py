@@ -6,7 +6,7 @@ import scprep
 import phate
 from sklearn.manifold import TSNE
 from sklearn import preprocessing
-from scipy.stats import special_ortho_group
+from scipy.stats import special_ortho_group, spearmanr
 from sklearn.datasets import make_swiss_roll, make_moons
 import demap
 import os
@@ -367,7 +367,7 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
         print("Error: Path does not exist")
         return
 
-    f = open(f"{path}/demap_mural.txt", "w")
+    f = open(f"{path}/demap_mural.txt", "a")
 
     for t in trees:
         for d in depths:
@@ -392,7 +392,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                   decay=0.5, t_list=default_trees, d_list=default_depths, path=None,
                   missing_profile=1, weighted=True, geometric=False, optimize="max",
                   use_missing=False, entropy="one", imputed=None, avoid=None, layers=1,
-                  quad=False):
+                  quad=False, b_ind=None, m_ind=None, avoid_binary=False, rand_entropy=None):
     """
     Train MURAL forests and save them and their embeddings.
 
@@ -413,7 +413,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
         print("Error: Path does not exist")
         return
 
-    f = open(f"{path}/times.txt", "w")
+    f = open(f"{path}/times.txt", "a")
 
     for t in t_list:
         for d in d_list:
@@ -424,7 +424,7 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                                         min_leaf_size=min_leaf_size, decay=decay, imputed=imputed,
                                         missing_profile=missing_profile, weighted=weighted, optimize=optimize,
                                         use_missing=use_missing, entropy=entropy, avoid=avoid, layers=layers,
-                                        quad=quad)
+                                        quad=quad, b_ind=b_ind, m_ind=m_ind, avoid_binary=avoid_binary, rand_entropy=rand_entropy)
             forest.to_pickle(f"{path}/{t}trees{d}depth/forest.pkl")
             f.write(f"Training time for {t} trees, {d} depth: {forest.time_used:0.4f} seconds\n")
 
@@ -513,7 +513,7 @@ def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=defaul
         print("Error: Path does not exist")
         return
 
-    f = open(f"{path}/knn_mural_{n_neighbors}.txt", "w")
+    f = open(f"{path}/knn_mural_{n_neighbors}.txt", "a")
     g = open(f"{path}/knn_mural_{n_neighbors}.csv", "a")
     g.write(f"n_neighbors;num_trees;depth;affinity_type;mural_acc\n")
 
@@ -543,3 +543,64 @@ def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=defaul
 
     f.close()
     g.close()
+
+
+def dists_to_ranks(dists):
+    order = dists.argsort(axis=0)
+    ranks = order.argsort(axis=0)
+    return ranks
+    
+    
+def corrs(d1, d2):
+    spearman_corrs = []
+    dr1 = dists_to_ranks(d1)
+    dr2 = dists_to_ranks(d2)
+    for i in range(len(d1)):
+        #print(i)
+        correlation, pvale = spearmanr(
+            dr1[i], dr2[i]
+        )
+        spearman_corrs.append(correlation)
+    spearman_corrs = np.array(spearman_corrs)
+    return np.mean(spearman_corrs)
+#k_neighbors from distance matrix.
+
+
+def dists_to_knn(dists, k):
+    n = dists.shape[0]
+    return np.eye(n)[np.argsort(dists)[:, :k+1]].sum(axis=1) - np.eye(n)
+    
+    
+def p_at_n(dists, gt_dists, k=10):
+    d_a = np.argsort(dists)[:, :k+1]
+    d_g = np.argsort(gt_dists)[:, :k+1]
+    n = dists.shape[0]
+    sums = 0
+    for l_a, l_g in zip(d_a, d_g):
+        #print(len(l_a), len(l_g), len(np.intersect1d(l_a, l_g)))
+        sums += (len(np.intersect1d(l_a, l_g)) - 1) / min(k, n - 1) # Count how many are the same
+    accuracy = sums / n
+    return accuracy
+
+    
+def distortion(dists, gt_dists):
+    # Normalize the distances such that r * dists is always <= gt_dists
+    eps = 1e-8
+    r = 1 / (np.nanmax(dists / (gt_dists + eps)))
+    norm_dists = dists * r
+    c = np.nanmax(gt_dists / (norm_dists + eps))
+    #print(r,c)
+    return c
+    
+    
+def dist_to_line(name, dists, gt_dists):
+    spearman = corrs(dists, gt_dists)
+    p_at_5 = p_at_n(dists, gt_dists, k=5)
+    p_at_10 = p_at_n(dists, gt_dists)
+    p_at_100 = p_at_n(dists, gt_dists, k=100)
+    p_at_500 = p_at_n(dists, gt_dists, k=500)
+    dist_coeff = distortion(dists, gt_dists)
+    return pd.DataFrame([name, spearman, p_at_5, p_at_10, p_at_100, p_at_500, dist_coeff], 
+                        index = ["name", "spearman", "P@5", "P@10", "P@100", "P@500", "Distortion"]).T
+
+
