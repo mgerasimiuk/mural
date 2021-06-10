@@ -318,6 +318,8 @@ class UnsupervisedTree():
             self.use_missing = use_missing
             if entropy == "spectral":
                 self.H = H_spectral
+            elif entropy == "full":
+                self.H = H_full_dim
             elif entropy == "two":
                 self.H = H_two
             elif entropy == "two_even":
@@ -573,6 +575,8 @@ class UnsupervisedTree():
             var23 = self.root.rng.choice(vars, size=2, replace=False)
 
             indices = np.block([index, var23])
+        elif self.root.H == H_full_dim:
+            indices = np.arange(self.X.shape[1])
         else:
             indices = index
 

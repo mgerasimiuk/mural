@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.neighbors import kneighbors_graph
 from sklearn.utils.validation import column_or_1d
+from itertools import combinations
 
 EPSILON = np.finfo(float).eps
 
@@ -259,6 +260,59 @@ def H_three_even(data, obs, var, imputed=None, use_missing=False, num_neighbors=
             H -= p_missing23 * np.log(p_missing23 + EPSILON)
         if num_missing123 != 0:
             H -= p_missing123 * np.log(p_missing123 + EPSILON)
+
+    return H
+
+
+def H_full_dim(data, obs, var, imputed=None, use_missing=False, num_neighbors=0):
+    """
+    Get full multidimensional entropy.
+    """
+
+    #var_sorted = list(np.sort(var))
+    var_list = list(var)
+    cols = [data[obs, v].reshape(-1) for v in var_list]
+
+    masks = [np.isnan(col) for col in cols]
+    mask_full = np.zeros_like(masks[0])
+    for mask in masks:
+        mask_full = mask_full | mask
+    mask_full = ~(mask_full)
+
+    num_missing = np.count_nonzero(~(mask_full))
+    num_total = len(cols[0]) - num_missing * (~use_missing)
+
+    dists = []
+    bins = []
+    for col in cols:
+        dist = col[mask_full]
+        dists.append(dist)
+        bins.append(np.histogram_bin_edges(dist, bins="auto"))
+
+    dist_discrete = np.histogramdd(dists, bins, density=False)[0]
+    dist_discrete = dist_discrete / num_total
+    H = -1 * np.sum(dist_discrete * np.log(dist_discrete + EPSILON))
+
+    combs = []
+    for i in range(1, len(var_list) + 1):
+        for comb in combinations(var_list, i):
+            combs.append(comb)
+    
+    for comb in combs:
+        comb_mask = np.ones_like(masks[0])
+        not_comb = list(set(comb) - set(var_list))
+
+        for idx in comb:
+            #idx_in_var_sorted = var_list.index(idx)
+            comb_mask = comb_mask & masks[idx]
+        for idx in not_comb:
+            #idx_in_var_sorted = var_sorted.index(idx)
+            comb_mask = comb_mask & ~(masks[idx])
+
+        n = np.count_nonzero(comb_mask)
+        if use_missing and n != 0:
+            p_missing = (n / num_total)
+            H -= p_missing * np.log(p_missing + EPSILON)
 
     return H
 
