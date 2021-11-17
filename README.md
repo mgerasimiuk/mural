@@ -1,4 +1,4 @@
-# **MURAL** Missingness in Unsupervised Random forests with Affinity-based Learning 
+# **MURAL** An Unsupervised Random Forest-based Embedding for Electronic Health Record Data 
 
 ## Constructing Unsupervised Random Forests with Missing Values in Clinical Data with Meaningful Missingness
 
