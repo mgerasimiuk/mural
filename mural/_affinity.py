@@ -6,8 +6,11 @@ def binary_affinity(result_list):
     """
     Calculates the average binary affinity from a list of results of each tree.
     
-    @param result_list a list of "classification" results for a given sample on each tree
-    @return the elementwise average of binary affinities across all the trees
+    Arguments:
+    result_list -- a list of "classification" results for a given sample on each tree
+    
+    Return:
+    the elementwise average of binary affinities across all the trees
     """
 
     n = result_list[0].shape[0] # We have this many observations
@@ -25,14 +28,18 @@ def binary_affinity(result_list):
 
 def adjacency_to_distances(Al, Ll=None, weighted=True, geometric=False):
     """
-    Takes adjacency list and returns a distance matrix on its decision tree.
-    Manually runs breadth-first search to avoid calling networkx methods
+    Takes adjacency list and returns a distance matrix on its decision tree. 
+    Manually runs breadth-first search to avoid calling networkx methods 
     and getting a dictionary intermediate.
-    @param Al an adjacency list of a tree
-    @param Ll a list of leaves of a tree (optional)
-    @param weighted True (default) or False
-    @param geometric True or False (default)
-    @return a distance matrix on the tree
+    
+    Arguments:
+    Al -- an adjacency list of a tree
+    Ll -- a list of leaves of a tree (optional)
+    weighted -- True (default) or False
+    geometric -- True or False (default)
+    
+    Return:
+    a distance matrix on the tree
     """
 
     # The number of nodes in one decision tree
@@ -90,10 +97,15 @@ def adjacency_to_distances(Al, Ll=None, weighted=True, geometric=False):
 
 def get_average_distance(D_list, result_list):
     """
-    Compute the average distance between two observations across all decision trees in a forest.
-    @param D_list a list containing the distance matrices for each tree in the given forest
-    @param result_list already found list of results of each tree
-    @return the matrix of average distances for the observations in this batch
+    Computes the average distance between two observations across all 
+    decision trees in a forest.
+    
+    Arguments:
+    D_list -- a list containing the distance matrices for each tree in the given forest
+    result_list -- already found list of results of each tree
+    
+    Return:
+    the matrix of average distances for the observations in this batch
     """
 
     assert len(D_list) == len(result_list)
