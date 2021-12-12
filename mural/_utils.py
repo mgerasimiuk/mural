@@ -6,8 +6,12 @@ import json
 def adjacency_matrix_from_list(Al):
     """
     Makes an adjacency matrix from an adjacency list representing the same graph
-    @param Al an adjacency list (Python type)
-    @return an adjacency matrix (ndarray)
+    
+    Arguments:
+    Al -- an adjacency list (Python type)
+    
+    Return:
+    an adjacency matrix (ndarray)
     """
 
     n = len(Al)
@@ -23,6 +27,12 @@ def adjacency_matrix_from_list(Al):
 def load_pickle(path):
     """
     Loads an UnsupervisedForest object from pickle.
+    
+    Arguments:
+    path -- path to a saved UnsupervisedForest object
+    
+    Return:
+    the UnsupervisedForest object
     """
 
     f = open(path, "rb")
@@ -34,6 +44,12 @@ def load_pickle(path):
 def load_json(path):
     """
     Loads an UnsupervisedForest object from json file.
+    
+    Arguments:
+    path -- path to a saved UnsupervisedForest object
+    
+    Return:
+    the UnsupervisedForest object
     """
 
     f = open(path, "r")
