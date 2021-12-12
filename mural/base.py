@@ -1,8 +1,7 @@
 # MURAL
-# Written by Michal Gerasimiuk for a project undertaken with Dennis Shung
-# Based on the structure proposed by Vaibhav Kumar (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
-# Which is derived from the fast.ai course (using the Apache license)
-# Documented using javadoc because I don't know anything else ¯\_(ツ)_/¯
+# Based on the structure proposed by Vaibhav Kumar 
+# (https://towardsdatascience.com/random-forests-and-decision-trees-from-scratch-in-python-3e4fa5ae4249)
+
 import time
 import numpy as np
 from collections import deque
@@ -34,19 +33,29 @@ class UnsupervisedForest():
                 decay=None, missing_profile=1, weighted=True, optimize="max", entropy="one", use_missing=True,
                 avoid=None, layers=1, quad=False, m_ind=None, b_ind=None, avoid_binary=False, rand_entropy=None):
         """
-        Create and fit a random forest for unsupervised learning.
-        @param X data matrix to fit to
-        @param n_estimators number of trees
-        @param n_sampled_features number of features that each node chooses one from, alternatively
-        log base 2 ("log") or square root ("sqrt") of the total number of features (BAD DO NOT USE!!!)
-        @param batch_size number of observations each tree fits on, if None, then all observations are used
-        @param depth the maximum height of the trees
-        @param min_leaf_size the minimum number of observations (without missingness) needed for a separate leaf
-        @param decay the factor by which the weight decays for missing value nodes
-        @param missing_profile an array whose length is the number of features or {0,1}, default=1 -
-        probabilities (confidence) that each feature is missing not at random
-        @param weighted True (default) or False (to use equal weights)
-        @param optimize "max" (default) or "min" (to use old splitting objective)
+        Creates and fits a MURAL forest.
+        
+        Arguments:
+        X -- the data matrix to train MURAL forests on
+        n_estimators -- number of trees
+        sampled_features -- the number of features for each node to randomly look at
+        batch_size -- the number of observations to subsample to
+        imputed -- ignore
+        depth -- the maximum depth of each tree
+        min_leaf_size -- the minimum number of observations needed to split
+        decay -- ignore
+        missing_profile -- ignore
+        weighted -- ignore
+        optimize -- ignore
+        entropy -- the type of entropy to use (one|two|three|many|full)
+        use_missing -- ignore
+        avoid -- specify "hard" to avoid choosing variables with missing values in some levels
+        layers -- number of tree depth levels to apply chosen avoid policy in
+        quad -- ignore
+        m_ind -- list with indices of variables with missing values
+        b_ind -- list with indices of binary variables
+        avoid_binary -- whether to apply avoid policy to binary variables as well
+        rand_entropy -- entropy to be given to SeedSequence
         """
 
         # Measure time to evaluate model efficiency
@@ -122,11 +131,8 @@ class UnsupervisedForest():
         ss = np.random.SeedSequence(rand_entropy)
         child_seeds = ss.spawn(n_estimators)
         streams = [np.random.default_rng(s) for s in child_seeds]
-        #states = ss.generate_state(n_estimators)
 
-        #imputers = [IterativeImputer(sample_posterior=True, random_state=state) for state in states]
-        imputers = np.arange(n_estimators)
-        #imputed = Parallel(n_jobs=N_JOBS)(delayed(impute_parallel)(self.X, seed, i) for i, seed in enumerate(child_seeds))
+        imputers = np.arange(n_estimators) # ignore
         self.trees = Parallel(n_jobs=N_JOBS)(delayed(self.create_tree)(stream, imputers[i], i) for i, stream in enumerate(streams))
         
         toc = time.perf_counter()
@@ -135,11 +141,15 @@ class UnsupervisedForest():
         
     def create_tree(self, rng, imputer, root_index=0):
         """
-        Create and fit a decision tree to be used by the forest.
+        Creates and fits a decision tree to be used by the forest.
 
-        @rng a random number generator
-        @param imputer an imputer object
-        @param index nothing, used to parallelize
+        Arguments:
+        rng -- a random number generator
+        imputer -- ignore
+        root_index -- nothing, used to parallelize
+        
+        Return:
+        an UnsupervisedTree object
         """
 
         replace = False
@@ -170,7 +180,6 @@ class UnsupervisedForest():
         chosen_inputs = np.sort(rng.choice(self.X.shape[0], size=self.batch_size, replace=replace))
 
         if self.imputed is None:
-            #imputed = imputer.fit_transform(self.X)
             imputed = self.X # This is to be removed later
         else:
             imputed = self.imputed
@@ -183,9 +192,13 @@ class UnsupervisedForest():
     
     def apply(self, x):
         """
-        Apply the fitted model to data.
-
-        @param x the data to apply the tree to
+        Applies the fitted model to data.
+        
+        Arguments:
+        x the data to apply the tree to
+        
+        Return:
+        leaf classifications of each datapoint
         """
 
         result = Parallel(n_jobs=N_JOBS)(delayed(tree.apply)(x) for tree in self.trees)
@@ -194,7 +207,10 @@ class UnsupervisedForest():
     
     def adjacency(self):
         """
-        Get adjacency lists from each tree in a fitted model.
+        Gets adjacency lists from each tree in a fitted model.
+        
+        Return:
+        adjacency lists representing all trees
         """
 
         result = Parallel(n_jobs=N_JOBS)(delayed(tree.adjacency)(i) for i, tree in enumerate(self.trees))
@@ -203,7 +219,11 @@ class UnsupervisedForest():
 
     def leaves(self):
         """
-        Get lists of leaves for each tree in a fitted model.
+        Gets lists of leaves for each tree in a fitted model.
+        
+        Return:
+        lists of indices (in the respective adjacency lists)
+        of terminal nodes
         """
 
         result = Parallel(n_jobs=N_JOBS)(delayed(tree.leaves)(i) for i, tree in enumerate(self.trees))
@@ -230,9 +250,12 @@ class UnsupervisedForest():
         """
         Computes the tree-sliced Wasserstein metric for the given cohorts.
 
-        @param p a cohort
-        @param q another cohort
-        @return an estimate of the Wasserstein distance between them, array of averaged importances
+        Arguments:
+        p -- a cohort
+        q -- another cohort
+        
+        Return:
+        an estimate of the Wasserstein distance between them, array of averaged importances
         """
         W_list = np.array(Parallel(n_jobs=N_JOBS)(delayed(tree.wasserstein)(p, q) for tree in self.trees))
         W_vals = W_list[:, 0]
@@ -242,6 +265,9 @@ class UnsupervisedForest():
     def to_pickle(self, path):
         """
         Saves the object to a pickle with the given path.
+        
+        Arguments:
+        path -- a path
         """
 
         f = open(path, "wb")
@@ -251,6 +277,9 @@ class UnsupervisedForest():
     def to_json(self, path):
         """
         Saves the object to a json file with the given path.
+        
+        Arguments:
+        path -- a path
         """
 
         f = open(path, "w")
@@ -267,18 +296,34 @@ class UnsupervisedTree():
                  quad=False, override=None, rng=None, imputer=None, root=None, parent=None, forest=None, 
                  root_index=0, mode=1, avoid_binary=False):
         """
-        Create and fit an unsupervised decision tree.
-        @param X data matrix
-        @param n_sampled_features number of features to choose from at each node
-        @param chosen_inputs ndarray containing the indices of chosen observations in this data matrix
-        @param chosen_features ndarray containing the indices of features to choose from at each node
-        @param depth maximum height of this tree
-        @param min_leaf_size minimum number of observations (without missingness) needed to create a new leaf
-        @param weight the weight of the edge in which this node is the child
-        @param decay the factor by which the weight for missing value nodes decays
-        @param root the handle of the root of this tree, if None, then this tree is marked as root to all its children
-        @param parent the handle of the parent of this node, if None, then this tree is marked as root
-        @param forest the handle of the forest that the tree belongs to
+        Creates and fits a MURAL decision tree.
+        
+        Arguments:
+        X -- the data matrix to train the MURAL tree on
+        n_sampled_features -- the number of features for each node to randomly look at
+        chosen_inputs -- the indices of datapoints available to the tree node
+        chosen_features -- the indices of variables available to the tree node
+        depth -- the maximum depth of each tree
+        min_leaf_size -- the minimum number of observations needed to split
+        weight -- ignore
+        m_ind -- list with indices of variables with missing values
+        b_ind -- list with indices of binary variables
+        decay -- ignore
+        entropy -- the type of entropy to use (one|two|three|many|full)
+        optimize -- ignore
+        use_missing -- ignore
+        avoid -- specify "hard" to avoid choosing variables with missing values in some levels
+        layers -- number of tree depth levels to apply chosen avoid policy in
+        quad -- ignore
+        override -- ignore
+        rng -- a random number generator
+        imputer -- ignore
+        root -- the root of the tree (initially None)
+        parent -- the parent of the node (None for a root)
+        forest -- the forest that a tree belongs to
+        root_index -- nothing, used to parallelize
+        mode -- used for implementing 4-way splits
+        avoid_binary -- whether to apply avoid policy to binary variables as well
         """
 
         self.X = X
@@ -388,7 +433,7 @@ class UnsupervisedTree():
     
     def find_split(self):
         """
-        Find the best split for the tree by checking all splits over all variables.
+        Finds the best split for the tree by checking all splits over all variables.
         """
         replace = False
         if self.mode == 1:
@@ -551,6 +596,9 @@ class UnsupervisedTree():
         """
         Find the best split for the chosen variable. Tries all the values seen in the data to find one
         that leads to the biggest information gain when split on.
+        
+        Arguments:
+        index -- the variable to split in
         """
 
         # Make a sorted list of values in this variable and get rid of missingness
@@ -623,18 +671,30 @@ class UnsupervisedTree():
     def is_leaf(self):
         """
         Checks if we reached a leaf.
+        
+        Return:
+        True or False
         """
         return self.score == np.NINF or self.score == np.inf or self.depth <= 0
 
     def split_column(self):
         """
         Take the column with the variable we split over.
+        
+        Return:
+        list of values in this variable
         """
         return self.X[self.chosen_inputs, self.split_feature]
 
     def apply(self, X):
         """
         Apply tree to a matrix of observations.
+        
+        Arguments:
+        X -- the data matrix
+        
+        Return:
+        the list of leaf assignments for each datapoint
         """
         return np.array([self.apply_row(x_i) for x_i in X])
 
@@ -642,6 +702,12 @@ class UnsupervisedTree():
         """
         Recursively apply tree to an observation. If the feature we split on is missing,
         go to the designated child node, else split by comparing with threshold value.
+        
+        Arguments:
+        x_i -- a datapoint
+        
+        Return:
+        its leaf assignment
         """
 
         if self.is_leaf():
@@ -672,12 +738,24 @@ class UnsupervisedTree():
     def adjacency(self, index=0):
         """
         Return the adjacency list of the tree.
+        
+        Arguments:
+        index -- nothing, used to parallelize
+        
+        Return:
+        an adjacency list
         """
         return self.root.Al
 
     def leaves(self, index=0):
         """
         Return the list of leaves of this tree.
+        
+        Arguments:
+        index -- nothing, used to parallelize
+        
+        Return:
+        the list of indices (in the adjacency list) of terminal nodes
         """
         return self.root.Ll
 
@@ -696,9 +774,12 @@ class UnsupervisedTree():
         """
         Computes the tree-Wasserstein metric for the given cohorts.
 
-        @param p a cohort
-        @param q another cohort
-        @return the tree-Wasserstein distance between them
+        Arguments:
+        p -- a cohort
+        q -- another cohort
+        
+        Return:
+        the tree-Wasserstein distance between them
         """
 
         n_p = p.shape[0]
@@ -731,6 +812,10 @@ class UnsupervisedTree():
         """
         Classifies the observation and assigns it to each subtree it enters,
         recursively traversing the whole tree.
+        
+        Arguments:
+        x_i -- a datapoint
+        x_results -- an array to save results in
         """
 
         x_results[self.index, 0] += 1 # Keep counting observations in this subtree
@@ -772,6 +857,12 @@ class UnsupervisedTree():
         """
         Visits each edge of the tree starting from its root to compute
         the tree-Wasserstein metric.
+        
+        Arguments:
+        diffs -- an array with differences for each node
+        
+        Return:
+        the tree-Wasserstein distance
         """
 
         Al = self.root.Al
@@ -810,6 +901,6 @@ class UnsupervisedTree():
 
 def impute_parallel(data, seed, idx=0):
     """
-    Helper function for multiple imputation in parallel.
+    UNUSED -- ignore
     """
     return IterativeImputer(sample_posterior=True, random_state=seed).fit_transform(data)
