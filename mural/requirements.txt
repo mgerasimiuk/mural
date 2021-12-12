@@ -1,0 +1,10 @@
+numpy
+networkx
+matplotlib
+joblib
+scikit-learn
+pandas
+scprep
+phate
+scipy
+-e git+https://github.com/scottgigante/DEMaP#egg=demap
