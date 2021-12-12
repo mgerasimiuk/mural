@@ -1,6 +1,8 @@
 # Code for testing MURAL
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scprep
 import phate
@@ -21,20 +23,24 @@ default_depths = [4, 6, 10]
 
 def graph_vars(df, vars_list):
     """
-    Make plots of data distributions.
+    Makes plots of data distributions.
 
-    @param df a pandas DataFrame
-    @param a list of variables to visualize
+    Arguments:
+    df -- a pandas DataFrame
+    vars_list -- a list of variables to visualize
     """
     df[vars_list].hist(figsize=(16, 20), bins=100, xlabelsize=8, ylabelsize=8)
 
 
 def make_embedded_swiss_roll(dims=3):
     """
-    Make a dataset of the Swiss roll manifold embedded in multiple dimensions.
+    Makes a dataset of the Swiss roll manifold embedded in multiple dimensions.
 
-    @param dims the number of dimensions to embed in
-    @return the data matrix for the embedded Swiss roll
+    Arguments:
+    dims -- the number of dimensions to embed in
+    
+    Return:
+    the data matrix for the embedded Swiss roll
     """
     assert dims >= 3
 
@@ -49,126 +55,14 @@ def make_embedded_swiss_roll(dims=3):
     return standardized_X, labels
 
 
-def make_embedded_moons(dims=2):
-    """
-    Make a dataset of the two moons manifold embedded in multiple dimensions.
-
-    @param dims the number of dimensions to embed in
-    @return the data matrix for the embedded moons
-    """
-    assert dims >= 2
-
-    # Generate moons
-    x, labels = make_moons(n_samples=3000, random_state=42)
-    x = np.dot(x, special_ortho_group.rvs(dims)[:2])
-
-    # Standardize with mean and standard deviation
-    standardized_X = preprocessing.scale(x, with_mean=True, with_std=True)
-
-    return standardized_X, labels
-
-def make_splatter():
-    """
-    Make a splatter dataset.
-
-    @return the true and noisy data matrices for the splatter dataset
-    """
-    
-    scprep.run.install_bioconductor("splatter")
-    data_true = demap.splatter.paths(bcv=0, dropout=0, seed=42)
-    data_noisy = demap.splatter.paths(bcv=0.2, dropout=0.5, seed=42)
-
-    return data_true, data_noisy
-
-
-def make_tree(n_dim=100, n_branch=10, branch_length=300, rand_multiplier=2, seed=37, sigma=4):
-
-    return phate.tree.gen_dla(n_dim=n_dim, n_branch=n_branch, branch_length=branch_length,
-                              rand_multiplier=rand_multiplier, seed=seed, sigma=sigma)
-
-
-def make_missing_middle(data, n_missing, idxs=None):
-    """
-    Take a dataset and create two datasets, one with missing (NaN)
-    values in the interquartile range, another with all NaNs replaced
-    with the mean.
-
-    @param data the data matrix
-    @param n_missing an array with numbers of observations with missing values in each column
-    @param idxs the column indices to do this process in
-    @return two data matrices
-    """
-
-    d = data.shape[1]
-    n = data.shape[0]
-
-    if idxs is None:
-        idxs = np.arange(d)
-    elif len(idxs) > d:
-        print("Error: Too many values selected")
-        return
-
-    new_missing, new_imputed = np.copy(data), np.copy(data)
-
-    for idx, num in zip(idxs, n_missing):
-        col = new_missing[:, idx]
-        q1 = np.quantile(col, 0.25)
-        q3 = np.quantile(col, 0.75)
-
-        mask = (col >= q1) & (col <= q3)
-        where_iqr = np.nonzero(mask)[0]
-        to_del = np.random.choice(where_iqr, size=num, replace=False)
-
-        new_missing[to_del, idx] = np.nan
-        new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
-
-    new_missing = preprocessing.scale(new_missing, with_mean=True, with_std=True)
-    new_imputed = preprocessing.scale(new_imputed, with_mean=True, with_std=True)
-
-    return new_missing, new_imputed
-
-
-def make_missing_random(data, n_missing, idxs=None):
-    """
-    Take a dataset and create two datasets, one with missing (NaN)
-    values randomly, another with all NaNs replaced with the mean.
-
-    @param data the data matrix
-    @param n_missing an array with numbers of observations with missing values in each column
-    @param idxs the column indices to do this process in
-    @return two data matrices
-    """
-
-    d = data.shape[1]
-    n = data.shape[0]
-
-    if idxs is None:
-        idxs = np.arange(d)
-    elif len(idxs) > d:
-        print("Error: Too many values selected")
-        return
-
-    new_missing, new_imputed = np.copy(data), np.copy(data)
-
-    for idx, num in zip(idxs, n_missing):
-        to_del = np.random.choice(np.arange(n), size=num, replace=False)
-
-        new_missing[to_del, idx] = np.nan
-        new_imputed[to_del, idx] = np.nanmean(new_missing[:, idx])
-
-    new_missing = preprocessing.scale(new_missing, with_mean=True, with_std=True)
-    new_imputed = preprocessing.scale(new_imputed, with_mean=True, with_std=True)
-
-    return new_missing, new_imputed
-
-
 def make_embeddings(data, labels, path=None):
     """
-    Make PCA, tSNE, and PHATE embeddings of the dataset and save them.
+    Makes PCA, tSNE, and PHATE embeddings of the dataset and saves them.
 
-    @param data the data to apply it to
-    @param labels the labels used for coloring
-    @param path the path to save embeddings and plots in, CWD by default
+    Arguments:
+    data -- the data to apply it to
+    labels -- the labels used for coloring
+    path -- the path to save embeddings and plots in, CWD by default
     """
     
     if path is None:
@@ -216,12 +110,14 @@ def make_embeddings(data, labels, path=None):
 
 def test_forest(forest, data, labels, path=None, geometric=False):
     """
-    Perform tests for a MURAL forest and saves embeddings and plots.
+    Performs tests for a MURAL forest and saves embeddings and plots.
 
-    @param forest a fitted UnsupervisedForest to test
-    @param data the data to apply it to
-    @param labels the labels used for coloring
-    @param path the path to save embeddings and plots in, CWD by default
+    Arguments:
+    forest -- a fitted UnsupervisedForest to test
+    data -- the data to apply it to
+    labels -- the labels used for coloring
+    path -- the path to save embeddings and plots in, CWD by default
+    geometric -- ignore
     """
 
     if path is None:
@@ -288,6 +184,14 @@ def test_forest(forest, data, labels, path=None, geometric=False):
 
 def save_forest(forest, data, path=None, geometric=False):
     """
+    Saves embeddings and plots for a trained MURAL forest.
+
+    Arguments:
+    forest -- a fitted UnsupervisedForest to test
+    data -- the data to apply it to
+    labels -- the labels used for coloring
+    path -- the path to save embeddings and plots in, CWD by default
+    geometric -- ignore
     """
 
     if path is None:
@@ -320,11 +224,11 @@ def save_forest(forest, data, path=None, geometric=False):
     
 def demap_reference(data, path=None):
     """
-    Run DEMaP on dataset and reference embeddings and save the results.
+    Runs DEMaP on dataset and reference embeddings and saves the results.
 
-    @param data the data matrix
-    @param path a path to directory containing a non_mural directory
-    with the embeddings
+    Arguments:
+    data -- the data matrix
+    path -- a path to directory containing a non_mural directory with the embeddings
     """
 
     if path is None:
@@ -355,10 +259,10 @@ def demap_mural(data, path=None, trees=default_trees, depths=default_depths):
     """
     Run DEMaP on MURAL embeddings and save the results.
 
-    @param gt the ground truth
-    @param path the path to a directory with the MURAL embedding directories
-    @param trees an array of numbers of trees
-    @param depths an array of depth parameters
+    data -- the ground truth
+    path -- the path to a directory with the MURAL embedding directories
+    trees -- a list of numbers of trees
+    depths -- a list of depth parameters
     """
 
     if path is None:
@@ -394,17 +298,32 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
                   use_missing=False, entropy="one", imputed=None, avoid=None, layers=1,
                   quad=False, b_ind=None, m_ind=None, avoid_binary=False, rand_entropy=None):
     """
-    Train MURAL forests and save them and their embeddings.
+    Trains MURAL forests and saves them and their embeddings.
 
-    @param data the data matrix to train MURAL forests on
-    @param labels the labels used for coloring plots
-    @param sampled_features the number of features for each node to randomly look at
-    @param batch_size the number of observations to subsample to
-    @param min_leaf size the minimum number of observations needed to split
-    @param decay a parameter that controls how quickly the weight in the missing values node decays
-    @param t_list an array of numbers of trees
-    @param d_list an array of depth parameters
-    @param path the path to a directory to save MURAL embeddings in
+    Arguments:
+    data -- the data matrix to train MURAL forests on
+    labels -- the labels used for coloring plots
+    sampled_features -- the number of features for each node to randomly look at
+    batch_size -- the number of observations to subsample to
+    min_leaf_size -- the minimum number of observations needed to split
+    decay -- ignore
+    t_list -- a list of numbers of trees
+    d_list -- a list of depth parameters
+    path -- the path to a directory to save MURAL embeddings in (default CWD)
+    missing_profile -- ignore
+    weighted -- ignore
+    geometric -- ignore
+    optimize -- ignore
+    use_missing -- ignore
+    entropy -- the type of entropy to use (one|two|three|many|full)
+    imputed -- ignore
+    avoid -- specify "hard" to avoid choosing variables with missing values in some levels
+    layers -- number of tree depth levels to apply chosen avoid policy in
+    quad -- ignore
+    b_ind -- list with indices of binary variables
+    m_ind -- list with indices of variables with missing values
+    avoid_binary -- whether to apply avoid policy to binary variables as well
+    rand_entropy -- entropy to be given to SeedSequence
     """
 
     if path is None:
@@ -435,12 +354,16 @@ def train_forests(data, labels, sampled_features, batch_size, min_leaf_size=2,
 
 def accuracy(A, A_true, n_neighbors, n_distributions):
     """
-    Determine accuracy of kNN graph generated by embedding and ground truth 
-    Save the results.
-    @param A the kNN graph
-    @param A_true the ground truth kNN graph
-    @param n_neighbors number of neighbors for kNN graph
-    @param n_distributions number of nodes in graph, generally dimension of array
+    Determines accuracy of kNN graph generated by embedding and ground truth.
+    
+    Arguments:
+    A -- the kNN graph
+    A_true -- the ground truth kNN graph
+    n_neighbors -- number of neighbors for kNN graph
+    n_distributions -- number of nodes in graph, generally dimension of array
+    
+    Return:
+    accuracy
     """
 
     accuracy = np.sum((A_true + A) == 2) / (n_neighbors * n_distributions)
@@ -449,9 +372,14 @@ def accuracy(A, A_true, n_neighbors, n_distributions):
 
 def knn_graph(data, n_neighbors):
     """
-    Create kNN graph on dataset and save the results.
-    @param data the data matrix
-    @param n_neighbors number of neighbors for kNN graph
+    Creates kNN graph on dataset and returns the results.
+    
+    Arguments:
+    data -- the data matrix
+    n_neighbors -- number of neighbors for kNN graph
+    
+    Return:
+    the kNN graph
     """
 
     A = kneighbors_graph(data, n_neighbors, mode='connectivity', include_self=False)
@@ -461,11 +389,14 @@ def knn_graph(data, n_neighbors):
 
 def knn_reference(gt_knn, n_neighbors, path=None):
     """
-    Create kNN graph on dataset and reference embeddings and save the results.
-    @param gt_knn the ground truth kNN graph
-    @param n_neighbors number of neighbors for kNN graph
-    @param path a path to directory containing a non_mural directory
+    Creates kNN graph on dataset and reference embeddings and saves the results.
+    
+    Arguments:
+    gt_knn -- the ground truth kNN graph
+    n_neighbors -- number of neighbors for kNN graph
+    path -- a path to directory containing a non_mural directory
     with the embeddings
+    
     """
 
     if path is None:
@@ -498,13 +429,15 @@ def knn_reference(gt_knn, n_neighbors, path=None):
 
 def knn_mural(gt_knn, n_neighbors, path=None, trees=default_trees, depths=default_depths):
     """
-    Create kNN graph on dataset and reference embeddings and save the results.
-    @param data the data matrix
-    @param gt_knn the ground truth kNN graph
-    @param n_neighbors number of neighbors for kNN graph
-    @param path the path to a directory with the MURAL embedding directories
-    @param trees an array of numbers of trees
-    @param depths an array of depth parameters
+    Creates kNN graph on dataset and reference embeddings and saves the results.
+    
+    Arguments:
+    data -- the data matrix
+    gt_knn -- the ground truth kNN graph
+    n_neighbors -- number of neighbors for kNN graph
+    path -- the path to a directory with the MURAL embedding directories
+    trees -- an array of numbers of trees
+    depths -- an array of depth parameters
     """
 
     if path is None:
